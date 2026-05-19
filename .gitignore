@@ -1,0 +1,14 @@
+node_modules/
+.env
+.env.local
+.env.*.local
+
+# Local bot state — persists via Railway Volume in production
+data/
+
+# OS / editor noise
+.DS_Store
+*.log
+npm-debug.log*
+.idea/
+.vscode/
