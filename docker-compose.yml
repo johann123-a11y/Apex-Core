@@ -1,0 +1,12 @@
+services:
+  apex-core-prod:
+    build: .
+    container_name: apex-core-prod
+    restart: unless-stopped
+    env_file: .env
+    networks:
+      - vps-shared
+
+networks:
+  vps-shared:
+    external: true

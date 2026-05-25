@@ -1,0 +1,31 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main, dev]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set environment
+        id: env
+        run: |
+          if [ "${{ github.ref_name }}" = "main" ]; then
+            echo "target=prod" >> "$GITHUB_OUTPUT"
+          else
+            echo "target=dev" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            cd /home/dev/Projects/Apex-Core
+            git fetch origin
+            git checkout ${{ github.ref_name }}
+            git pull origin ${{ github.ref_name }}
+            docker compose up -d --build apex-core-${{ steps.env.outputs.target }}

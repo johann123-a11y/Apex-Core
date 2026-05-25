@@ -2,6 +2,7 @@
 
 const { Client, GatewayIntentBits, Partials, REST, Routes } = require('discord.js');
 const { TOKEN, CLIENT_ID, DEV_GUILD_ID } = require('./config');
+const db = require('./lib/db');
 
 const staff = require('./modules/staff');
 const tickets = require('./modules/tickets');
@@ -35,6 +36,7 @@ async function main() {
   if (!TOKEN) {
     throw new Error('DISCORD_TOKEN is missing. Copy .env.example to .env and fill it in.');
   }
+  await db.init();
   await registerCommands();
 
   if (process.argv.includes('--register-only')) return;
