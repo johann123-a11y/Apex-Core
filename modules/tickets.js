@@ -107,6 +107,11 @@ const ticketCommand = new SlashCommandBuilder()
       .addRoleOption((o) => o.setName('role').setDescription('Role to toggle').setRequired(true)),
   )
   .addSubcommand((s) => s.setName('panels').setDescription('List configured panels'))
+  .addSubcommand((s) => s.setName('info').setDescription('Show all ticket setups, description config, and roles'))
+  .addSubcommand((s) =>
+    s.setName('edit').setDescription('Edit an existing ticket panel')
+      .addStringOption((o) => o.setName('panel_id').setDescription('Panel ID to edit').setRequired(true).setMaxLength(32)),
+  )
   .addSubcommand((s) =>
     s.setName('delete').setDescription('Delete a configured panel')
       .addStringOption((o) => o.setName('panel_id').setDescription('Panel ID to delete').setRequired(true).setMaxLength(32)),
@@ -175,6 +180,48 @@ function buildSetupModal() {
     .setCustomId('questions').setLabel(truncate('Questions before ticket (optional)', DISCORD_LIMITS.TEXT_INPUT_LABEL))
     .setStyle(TextInputStyle.Paragraph).setMaxLength(1000).setRequired(false)
     .setPlaceholder(truncate('What is your IGN?\nWhat is your issue?', DISCORD_LIMITS.TEXT_INPUT_PLACEHOLDER));
+
+  modal.addComponents(
+    new ActionRowBuilder().addComponents(panelId),
+    new ActionRowBuilder().addComponents(buttonText),
+    new ActionRowBuilder().addComponents(buttonColor),
+    new ActionRowBuilder().addComponents(categoryId),
+    new ActionRowBuilder().addComponents(questions),
+  );
+  return modal;
+}
+
+function buildEditModal(panel) {
+  const modal = new ModalBuilder()
+    .setCustomId(IDS.SETUP_MODAL)
+    .setTitle(truncate(`Edit: ${panel.panel_id}`, DISCORD_LIMITS.MODAL_TITLE));
+
+  const panelId = new TextInputBuilder()
+    .setCustomId('panel_id').setLabel(truncate('Panel ID (e.g. support)', DISCORD_LIMITS.TEXT_INPUT_LABEL))
+    .setStyle(TextInputStyle.Short).setMaxLength(32).setMinLength(1).setRequired(true)
+    .setValue(panel.panel_id);
+
+  const buttonText = new TextInputBuilder()
+    .setCustomId('button_text').setLabel(truncate('Button Text (e.g. Support)', DISCORD_LIMITS.TEXT_INPUT_LABEL))
+    .setStyle(TextInputStyle.Short).setMaxLength(DISCORD_LIMITS.BUTTON_LABEL).setMinLength(1).setRequired(true)
+    .setValue(truncate(panel.button_text, DISCORD_LIMITS.BUTTON_LABEL));
+
+  const buttonColor = new TextInputBuilder()
+    .setCustomId('button_color').setLabel(truncate('Button Color: Blue/Green/Red/Gray', DISCORD_LIMITS.TEXT_INPUT_LABEL))
+    .setStyle(TextInputStyle.Short).setMaxLength(10).setRequired(true)
+    .setValue(panel.button_color || 'Blue');
+
+  const categoryId = new TextInputBuilder()
+    .setCustomId('category_id').setLabel(truncate('Discord Category ID (optional)', DISCORD_LIMITS.TEXT_INPUT_LABEL))
+    .setStyle(TextInputStyle.Short).setMaxLength(21).setRequired(false)
+    .setPlaceholder(truncate('Right-click category → Copy ID', DISCORD_LIMITS.TEXT_INPUT_PLACEHOLDER));
+  if (panel.category_id) categoryId.setValue(panel.category_id);
+
+  const questions = new TextInputBuilder()
+    .setCustomId('questions').setLabel(truncate('Questions before ticket (optional)', DISCORD_LIMITS.TEXT_INPUT_LABEL))
+    .setStyle(TextInputStyle.Paragraph).setMaxLength(1000).setRequired(false)
+    .setPlaceholder(truncate('What is your IGN?\nWhat is your issue?', DISCORD_LIMITS.TEXT_INPUT_PLACEHOLDER));
+  if (panel.questions?.length) questions.setValue(truncate(panel.questions.join('\n'), 1000));
 
   modal.addComponents(
     new ActionRowBuilder().addComponents(panelId),
@@ -389,6 +436,80 @@ async function handlePanels(interaction) {
     (p) => `• \`${p.panel_id}\` — ${p.button_text} [${p.button_color}] · cat:${p.category_id || 'none'} · questions:${(p.questions || []).length}`,
   );
   return ephemeral(interaction, truncate(lines.join('\n'), 1900));
+}
+
+async function handleInfo(interaction) {
+  if (!checks.isStaff(interaction.member)) return ephemeral(interaction, 'Staff only.');
+  const g = db.guild(interaction.guildId);
+
+  const embed = new EmbedBuilder()
+    .setColor(EMBED_COLOR_BRAND)
+    .setTitle(truncate('Ticket System — Overview', DISCORD_LIMITS.EMBED_TITLE))
+    .setTimestamp();
+
+  // Description config
+  const desc = g.description;
+  if (desc && (desc.title || desc.subtitle || desc.description || desc.footer)) {
+    const parts = [];
+    if (desc.title) parts.push(`**Title:** ${truncate(desc.title, 100)}`);
+    if (desc.subtitle) parts.push(`**Subtitle:** ${truncate(desc.subtitle, 100)}`);
+    if (desc.description) parts.push(`**Body:** ${truncate(desc.description, 200)}`);
+    if (desc.footer) parts.push(`**Footer:** ${truncate(desc.footer, 100)}`);
+    embed.addFields({ name: '📝 Panel Description', value: truncate(parts.join('\n'), DISCORD_LIMITS.EMBED_FIELD_VALUE), inline: false });
+  } else {
+    embed.addFields({ name: '📝 Panel Description', value: '_Not set — use `/ticket description`_', inline: false });
+  }
+
+  // Global roles
+  const staffRole = g.staff_role_id ? `<@&${g.staff_role_id}>` : '_None_';
+  const viewRoles = (g.view_role_ids || []).length
+    ? truncate((g.view_role_ids).map((id) => `<@&${id}>`).join(', '), DISCORD_LIMITS.EMBED_FIELD_VALUE)
+    : '_None_';
+  const pingRoles = (g.ping_role_ids || []).length
+    ? truncate((g.ping_role_ids).map((id) => `<@&${id}>`).join(', '), DISCORD_LIMITS.EMBED_FIELD_VALUE)
+    : '_None_';
+
+  embed.addFields(
+    { name: '🛡️ Staff Role', value: staffRole, inline: true },
+    { name: '👁️ View Roles', value: viewRoles, inline: true },
+    { name: '🔔 Ping Roles', value: pingRoles, inline: true },
+  );
+
+  // Panels
+  const panels = Object.values(g.panels);
+  if (!panels.length) {
+    embed.addFields({ name: '📋 Panels', value: '_No panels configured. Use `/ticket setup` to create one._', inline: false });
+  } else {
+    // Separator field
+    embed.addFields({ name: `📋 Panels (${panels.length})`, value: '​', inline: false });
+    const shown = panels.slice(0, 21); // keep well under the 25-field limit
+    for (const p of shown) {
+      const qs = p.questions || [];
+      const qLine = qs.length ? qs.map((q) => `• ${truncate(q, 60)}`).join('\n') : '_None_';
+      const lines = [
+        `**Button:** ${truncate(p.button_text, 60)} \`[${p.button_color}]\``,
+        `**Category:** ${p.category_id ? `\`${p.category_id}\`` : '_None_'}`,
+        `**Tickets opened:** ${g.counters[p.panel_id] || 0}`,
+        `**Questions (${qs.length}):**\n${truncate(qLine, 400)}`,
+      ];
+      embed.addFields({ name: truncate(`\`${p.panel_id}\``, DISCORD_LIMITS.EMBED_FIELD_NAME), value: truncate(lines.join('\n'), DISCORD_LIMITS.EMBED_FIELD_VALUE), inline: true });
+    }
+    if (panels.length > 21) {
+      embed.addFields({ name: `…and ${panels.length - 21} more`, value: 'Use `/ticket panels` for the full list.', inline: false });
+    }
+  }
+
+  embed.setFooter({ text: truncate('Use /ticket edit <panel_id> to modify a panel • /ticket setup to add a new one', DISCORD_LIMITS.EMBED_FOOTER) });
+
+  return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+}
+
+async function handleEdit(interaction) {
+  if (!checks.isStaff(interaction.member)) return ephemeral(interaction, 'Staff only.');
+  const id = interaction.options.getString('panel_id', true).trim().toLowerCase();
+  const g = db.guild(interaction.guildId);
+  if (!g.panels[id]) return ephemeral(interaction, `No panel \`${id}\` found. Use \`/ticket setup\` to create it first.`);
+  return interaction.showModal(buildEditModal(g.panels[id]));
 }
 
 async function handleDelete(interaction) {
@@ -857,6 +978,8 @@ function register(client) {
           case 'view':        return await handleView(interaction);
           case 'ping':        return await handlePing(interaction);
           case 'panels':      return await handlePanels(interaction);
+          case 'info':        return await handleInfo(interaction);
+          case 'edit':        return await handleEdit(interaction);
           case 'delete':      return await handleDelete(interaction);
           default:            return ephemeral(interaction, 'Unknown subcommand.');
         }
