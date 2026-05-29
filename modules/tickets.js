@@ -10,6 +10,7 @@ const {
   ButtonStyle,
   StringSelectMenuBuilder,
   EmbedBuilder,
+  AttachmentBuilder,
   PermissionFlagsBits,
   ChannelType,
   MessageFlags,
@@ -115,6 +116,10 @@ const ticketCommand = new SlashCommandBuilder()
   .addSubcommand((s) =>
     s.setName('delete').setDescription('Delete a configured panel')
       .addStringOption((o) => o.setName('panel_id').setDescription('Panel ID to delete').setRequired(true).setMaxLength(32)),
+  )
+  .addSubcommand((s) =>
+    s.setName('log').setDescription('Set (or clear) the channel where ticket transcripts are sent')
+      .addChannelOption((o) => o.setName('channel').setDescription('Transcript log channel — omit to clear').setRequired(false)),
   );
 
 // ───── Modal builders ─────
@@ -786,6 +791,88 @@ async function onCancelCloseClick(interaction) {
   await interaction.update({ embeds: [okEmbed], components: [] }).catch(() => {});
 }
 
+// ───── Transcript helpers ─────
+
+async function fetchAllMessages(channel, limit = 500) {
+  const messages = [];
+  let before = null;
+  while (messages.length < limit) {
+    const opts = { limit: 100 };
+    if (before) opts.before = before;
+    const batch = await channel.messages.fetch(opts).catch(() => null);
+    if (!batch || batch.size === 0) break;
+    messages.push(...batch.values());
+    if (batch.size < 100) break;
+    before = batch.last().id;
+  }
+  messages.sort((a, b) => a.createdTimestamp - b.createdTimestamp);
+  return messages.slice(0, limit);
+}
+
+function formatTranscript(messages, ticket, panel, guildName) {
+  const header = [
+    'Ticket Transcript',
+    `Guild:    ${guildName}`,
+    `Panel:    ${panel?.panel_id || 'unknown'}`,
+    `Opened by: <@${ticket.user_id}> (${ticket.user_id})`,
+    `Opened at: ${new Date(ticket.created_at).toISOString()}`,
+    `Closed at: ${new Date().toISOString()}`,
+    `Messages: ${messages.length}`,
+    '─'.repeat(60),
+    '',
+  ].join('\n');
+
+  const body = messages.map((msg) => {
+    const ts = msg.createdAt.toISOString().replace('T', ' ').slice(0, 19);
+    const author = msg.author ? `${msg.author.username}` : 'Unknown';
+    const content = msg.content || '';
+    const attachmentList = [...msg.attachments.values()].map((a) => `[Attachment: ${a.name}]`).join(' ');
+    const embedNote = msg.embeds.length ? `[${msg.embeds.length} embed(s)]` : '';
+    const parts = [content, attachmentList, embedNote].filter(Boolean).join(' ');
+    return `[${ts}] ${author}: ${parts || '[no content]'}`;
+  }).join('\n');
+
+  return header + body;
+}
+
+async function sendTranscript(client, logChannelId, text, ticket, panel, channelName) {
+  const logChannel = await client.channels.fetch(logChannelId).catch(() => null);
+  if (!logChannel) return;
+
+  const buf = Buffer.from(text, 'utf8');
+  const attachment = new AttachmentBuilder(buf, { name: `transcript-${channelName}.txt` });
+
+  const embed = new EmbedBuilder()
+    .setColor(EMBED_COLOR_BRAND)
+    .setTitle(truncate('Ticket Transcript', DISCORD_LIMITS.EMBED_TITLE))
+    .addFields(
+      { name: 'Channel', value: truncate(channelName, DISCORD_LIMITS.EMBED_FIELD_VALUE), inline: true },
+      { name: 'Panel', value: truncate(panel?.panel_id || 'unknown', DISCORD_LIMITS.EMBED_FIELD_VALUE), inline: true },
+      { name: 'Opened by', value: `<@${ticket.user_id}>`, inline: true },
+      { name: 'Opened at', value: `<t:${Math.floor(ticket.created_at / 1000)}:F>`, inline: true },
+      { name: 'Closed at', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: true },
+    )
+    .setTimestamp();
+
+  await logChannel.send({ embeds: [embed], files: [attachment] });
+}
+
+// ───── /ticket log handler ─────
+
+async function handleLog(interaction) {
+  if (!checks.isAdmin(interaction.member)) return ephemeral(interaction, 'Admin only.');
+  const g = db.guild(interaction.guildId);
+  const channel = interaction.options.getChannel('channel');
+  if (!channel) {
+    g.log_ticket_channel_id = null;
+    await db.save();
+    return ephemeral(interaction, 'Ticket transcript log channel cleared.');
+  }
+  g.log_ticket_channel_id = channel.id;
+  await db.save();
+  return ephemeral(interaction, `Ticket transcripts will be sent to ${channel}.`);
+}
+
 // ───── Channel creation & teardown ─────
 
 function buildTicketOverwrites(guild, ownerId, g) {
@@ -935,6 +1022,10 @@ async function createTicketChannel(interaction, panel, answers) {
 
 async function closeTicket(interaction, ticket) {
   const g = db.guild(interaction.guildId);
+  const logChannelId = g.log_ticket_channel_id;
+  const panel = g.panels[ticket.panel_id] || null;
+  const channelName = interaction.channel.name;
+
   delete g.tickets[interaction.channel.id];
   await db.save();
 
@@ -956,13 +1047,36 @@ async function closeTicket(interaction, ticket) {
   }
 
   const channel = interaction.channel;
-  setTimeout(async () => {
+  const client = interaction.client;
+
+  // Background: fetch transcript → wait 5s → send transcript → delete channel
+  (async () => {
+    let transcriptText = null;
+    if (logChannelId) {
+      try {
+        const messages = await fetchAllMessages(channel);
+        transcriptText = formatTranscript(messages, ticket, panel, interaction.guild?.name || interaction.guildId);
+      } catch (e) {
+        console.error('[tickets] transcript fetch failed:', e?.message);
+      }
+    }
+
+    await new Promise((r) => setTimeout(r, 5000));
+
+    if (logChannelId && transcriptText) {
+      try {
+        await sendTranscript(client, logChannelId, transcriptText, ticket, panel, channelName);
+      } catch (e) {
+        console.error('[tickets] transcript send failed:', e?.message);
+      }
+    }
+
     try {
       await channel.delete(`Ticket closed by ${interaction.user.tag}`);
     } catch (e) {
       console.error('[tickets] delete channel failed:', e?.message);
     }
-  }, 5000);
+  })().catch((e) => console.error('[tickets] close flow error:', e?.message));
 }
 
 // ───── Event dispatcher ─────
@@ -987,6 +1101,7 @@ function register(client) {
           case 'info':        return await handleInfo(interaction);
           case 'edit':        return await handleEdit(interaction);
           case 'delete':      return await handleDelete(interaction);
+          case 'log':         return await handleLog(interaction);
           default:            return ephemeral(interaction, 'Unknown subcommand.');
         }
       }
