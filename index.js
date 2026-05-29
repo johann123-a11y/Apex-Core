@@ -7,8 +7,10 @@ const staff = require('./modules/staff');
 const tickets = require('./modules/tickets');
 const logging = require('./modules/logging');
 const moderation = require('./modules/moderation');
+const warns      = require('./modules/warns');
+const welcome    = require('./modules/welcome');
 
-const modules = [staff, tickets, logging, moderation];
+const modules = [staff, tickets, logging, moderation, warns, welcome];
 
 function buildClient() {
   return new Client({

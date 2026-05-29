@@ -609,6 +609,9 @@ async function onPanelModal(interaction) {
   const panelId = interaction.customId.slice(prefix.length);
 
   const g = db.guild(interaction.guildId);
+  if ((g.application_blacklist || []).includes(interaction.user.id)) {
+    return ephemeral(interaction, 'Du bist von Tickets/Bewerbungen gesperrt.');
+  }
   const panel = g.panels[panelId];
   if (!panel) return ephemeral(interaction, 'This panel no longer exists.');
 
@@ -635,6 +638,9 @@ async function onPanelClick(interaction) {
   const panelId = interaction.customId.slice(prefix.length);
 
   const g = db.guild(interaction.guildId);
+  if ((g.application_blacklist || []).includes(interaction.user.id)) {
+    return ephemeral(interaction, 'Du bist von Tickets/Bewerbungen gesperrt.');
+  }
   const panel = g.panels[panelId];
   if (!panel) return ephemeral(interaction, 'This panel no longer exists.');
 
