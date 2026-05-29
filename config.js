@@ -38,6 +38,8 @@ module.exports = {
   TOKEN: process.env.DISCORD_TOKEN,
   CLIENT_ID: process.env.DISCORD_CLIENT_ID,
   DEV_GUILD_ID: process.env.DISCORD_DEV_GUILD_ID || null,
+  TRANSCRIPT_BASE_URL: (process.env.TRANSCRIPT_BASE_URL || 'http://localhost:3000').replace(/\/$/, ''),
+  TRANSCRIPT_PORT: parseInt(process.env.TRANSCRIPT_PORT || '3000', 10),
   DISCORD_LIMITS,
   truncate,
   // customId prefixes — keep short, room for suffixes; never exceed 100 chars total
@@ -48,6 +50,8 @@ module.exports = {
     TICKET_REQUEST_CLOSE: 'apex:ticket_request_close',
     TICKET_CONFIRM_CLOSE: 'apex:ticket_confirm_close',
     TICKET_CANCEL_CLOSE: 'apex:ticket_cancel_close',
+    CLOSE_REASON_MODAL: 'apex:close_reason',       // apex:close_reason:{channelId}
+    TICKET_SAVE_TRANSCRIPT: 'apex:ticket_save',    // apex:ticket_save:{guildId_ticketId}
     DESCRIPTION_MODAL: 'apex:description_modal',
     SETUP_MODAL: 'apex:setup_modal',
     GROUP_SELECT: 'apex:group_select',

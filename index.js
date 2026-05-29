@@ -1,7 +1,8 @@
 'use strict';
 
 const { Client, GatewayIntentBits, Partials, REST, Routes } = require('discord.js');
-const { TOKEN, CLIENT_ID, DEV_GUILD_ID } = require('./config');
+const { TOKEN, CLIENT_ID, DEV_GUILD_ID, TRANSCRIPT_PORT } = require('./config');
+const transcriptServer = require('./lib/transcript-server');
 
 const staff = require('./modules/staff');
 const tickets = require('./modules/tickets');
@@ -50,6 +51,8 @@ async function main() {
   await registerCommands();
 
   if (process.argv.includes('--register-only')) return;
+
+  transcriptServer.start(TRANSCRIPT_PORT);
 
   const client = buildClient();
   for (const m of modules) m.register(client);

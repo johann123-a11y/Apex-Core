@@ -10,15 +10,18 @@ const {
   ButtonStyle,
   StringSelectMenuBuilder,
   EmbedBuilder,
-  AttachmentBuilder,
   PermissionFlagsBits,
   ChannelType,
   MessageFlags,
 } = require('discord.js');
 
-const db = require('../lib/db');
+const fs   = require('fs');
+const path = require('path');
+
+const db   = require('../lib/db');
+const tdb  = require('../lib/transcript-db');
 const checks = require('../lib/checks');
-const { DISCORD_LIMITS, IDS, truncate } = require('../config');
+const { DISCORD_LIMITS, IDS, TRANSCRIPT_BASE_URL, truncate } = require('../config');
 
 // ───── Constants & helpers ─────
 
@@ -236,6 +239,23 @@ function buildEditModal(panel) {
     new ActionRowBuilder().addComponents(questions),
   );
   return modal;
+}
+
+function buildCloseReasonModal(channelId) {
+  return new ModalBuilder()
+    .setCustomId(`${IDS.CLOSE_REASON_MODAL}:${channelId}`)
+    .setTitle(truncate('Close Ticket', DISCORD_LIMITS.MODAL_TITLE))
+    .addComponents(
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId('reason')
+          .setLabel(truncate('Reason (optional)', DISCORD_LIMITS.TEXT_INPUT_LABEL))
+          .setStyle(TextInputStyle.Short)
+          .setMaxLength(200)
+          .setRequired(false)
+          .setPlaceholder(truncate('e.g. Issue resolved, no response…', DISCORD_LIMITS.TEXT_INPUT_PLACEHOLDER)),
+      ),
+    );
 }
 
 // ───── Embeds & buttons ─────
@@ -707,7 +727,7 @@ async function onCloseClick(interaction) {
   if (!checks.isStaff(interaction.member)) {
     return ephemeral(interaction, 'Only staff can close tickets directly. Use Request Close instead.');
   }
-  await closeTicket(interaction, ticket);
+  await interaction.showModal(buildCloseReasonModal(interaction.channel.id));
 }
 
 async function onRequestCloseClick(interaction) {
@@ -764,7 +784,7 @@ async function onConfirmCloseClick(interaction) {
     );
   }
 
-  await closeTicket(interaction, ticket);
+  await interaction.showModal(buildCloseReasonModal(interaction.channel.id));
 }
 
 async function onCancelCloseClick(interaction) {
@@ -791,7 +811,62 @@ async function onCancelCloseClick(interaction) {
   await interaction.update({ embeds: [okEmbed], components: [] }).catch(() => {});
 }
 
+// ───── Close reason modal submit ─────
+
+async function onCloseReasonModal(interaction) {
+  const prefix    = `${IDS.CLOSE_REASON_MODAL}:`;
+  const channelId = interaction.customId.slice(prefix.length);
+  if (channelId !== interaction.channel.id) {
+    return ephemeral(interaction, 'This modal is for a different channel.');
+  }
+  const ticket = checks.getTicket(interaction.guildId, channelId);
+  if (!ticket) return ephemeral(interaction, 'This ticket no longer exists.');
+
+  let reason = null;
+  try { reason = interaction.fields.getTextInputValue('reason')?.trim() || null; } catch { /* optional */ }
+
+  await closeTicket(interaction, ticket, reason);
+}
+
+// ───── Save Transcript button ─────
+
+async function onSaveTranscriptClick(interaction) {
+  if (!checks.isStaff(interaction.member)) return ephemeral(interaction, 'Staff only.');
+
+  const key  = interaction.customId.slice(`${IDS.TICKET_SAVE_TRANSCRIPT}:`.length);
+  const meta = tdb.get(key);
+  if (!meta) {
+    // Transcript already gone — just remove the button
+    return interaction.update({ embeds: interaction.message.embeds, components: [] }).catch(() => {});
+  }
+  meta.permanent = true;
+  delete meta.expires_at;
+  await tdb.save();
+
+  // Rebuild embeds with updated footer
+  const newEmbeds = interaction.message.embeds.map((e) =>
+    EmbedBuilder.from(e).setFooter({ text: 'Transcript saved permanently' }),
+  );
+
+  // Rebuild components — disable the Save button
+  const newComponents = interaction.message.components.map((row) => {
+    const newRow = new ActionRowBuilder();
+    for (const btn of row.components) {
+      const b = ButtonBuilder.from(btn);
+      if (btn.customId === interaction.customId) b.setDisabled(true);
+      newRow.addComponents(b);
+    }
+    return newRow;
+  });
+
+  await interaction.update({ embeds: newEmbeds, components: newComponents });
+}
+
 // ───── Transcript helpers ─────
+
+function escapeHtml(str) {
+  return String(str ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
 
 async function fetchAllMessages(channel, limit = 500) {
   const messages = [];
@@ -809,52 +884,105 @@ async function fetchAllMessages(channel, limit = 500) {
   return messages.slice(0, limit);
 }
 
-function formatTranscript(messages, ticket, panel, guildName) {
-  const header = [
-    'Ticket Transcript',
-    `Guild:    ${guildName}`,
-    `Panel:    ${panel?.panel_id || 'unknown'}`,
-    `Opened by: <@${ticket.user_id}> (${ticket.user_id})`,
-    `Opened at: ${new Date(ticket.created_at).toISOString()}`,
-    `Closed at: ${new Date().toISOString()}`,
-    `Messages: ${messages.length}`,
-    '─'.repeat(60),
-    '',
-  ].join('\n');
+function generateHtmlTranscript(messages, ticket, panel, guild, closedBy, reason) {
+  const panelName   = panel?.panel_id || 'unknown';
+  const openedAt    = new Date(ticket.created_at).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
+  const closedAt    = new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
+  const openedByMsg = messages.find((m) => m.author?.id === ticket.user_id);
+  const openedByName = openedByMsg?.author?.username || `${ticket.user_id}`;
+  const closedByName = closedBy.username || closedBy.id;
 
-  const body = messages.map((msg) => {
-    const ts = msg.createdAt.toISOString().replace('T', ' ').slice(0, 19);
-    const author = msg.author ? `${msg.author.username}` : 'Unknown';
-    const content = msg.content || '';
-    const attachmentList = [...msg.attachments.values()].map((a) => `[Attachment: ${a.name}]`).join(' ');
-    const embedNote = msg.embeds.length ? `[${msg.embeds.length} embed(s)]` : '';
-    const parts = [content, attachmentList, embedNote].filter(Boolean).join(' ');
-    return `[${ts}] ${author}: ${parts || '[no content]'}`;
-  }).join('\n');
+  // Q&A section
+  let qaHtml = '';
+  if (ticket.answers && Object.keys(ticket.answers).length) {
+    const items = Object.entries(ticket.answers)
+      .map(([q, a]) => `<div class="qa-item"><div class="qa-q">${escapeHtml(q)}</div><div class="qa-a">${escapeHtml(a || '—')}</div></div>`)
+      .join('');
+    qaHtml = `<div class="qa-section"><h2>📋 Form Answers</h2>${items}</div>`;
+  }
 
-  return header + body;
-}
+  // Messages — group consecutive messages by same author within 5 min (Discord-style)
+  const msgLines = [];
+  let lastAuthorId = null;
+  let lastMsgTime  = 0;
+  for (const msg of messages) {
+    const authorId  = msg.author?.id || 'unknown';
+    const msgTime   = msg.createdTimestamp;
+    const grouped   = authorId === lastAuthorId && (msgTime - lastMsgTime) < 5 * 60 * 1000;
+    lastAuthorId    = authorId;
+    lastMsgTime     = msgTime;
 
-async function sendTranscript(client, logChannelId, text, ticket, panel, channelName) {
-  const logChannel = await client.channels.fetch(logChannelId).catch(() => null);
-  if (!logChannel) return;
+    const avatarUrl = msg.author?.displayAvatarURL({ extension: 'png', size: 64 }) || '';
+    const username  = escapeHtml(msg.author?.username || 'Unknown');
+    const ts        = new Date(msgTime).toLocaleString('en-US', { dateStyle: 'short', timeStyle: 'short' });
 
-  const buf = Buffer.from(text, 'utf8');
-  const attachment = new AttachmentBuilder(buf, { name: `transcript-${channelName}.txt` });
+    const contentHtml = msg.content
+      ? `<div class="text">${escapeHtml(msg.content)}</div>`
+      : '';
 
-  const embed = new EmbedBuilder()
-    .setColor(EMBED_COLOR_BRAND)
-    .setTitle(truncate('Ticket Transcript', DISCORD_LIMITS.EMBED_TITLE))
-    .addFields(
-      { name: 'Channel', value: truncate(channelName, DISCORD_LIMITS.EMBED_FIELD_VALUE), inline: true },
-      { name: 'Panel', value: truncate(panel?.panel_id || 'unknown', DISCORD_LIMITS.EMBED_FIELD_VALUE), inline: true },
-      { name: 'Opened by', value: `<@${ticket.user_id}>`, inline: true },
-      { name: 'Opened at', value: `<t:${Math.floor(ticket.created_at / 1000)}:F>`, inline: true },
-      { name: 'Closed at', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: true },
-    )
-    .setTimestamp();
+    const attachHtml = [...msg.attachments.values()].map((att) => {
+      const isImg = /\.(png|jpe?g|gif|webp|svg)$/i.test(att.name || '');
+      return isImg
+        ? `<div class="att"><img src="${escapeHtml(att.url)}" alt="${escapeHtml(att.name)}" loading="lazy"></div>`
+        : `<div class="att"><a href="${escapeHtml(att.url)}" target="_blank" rel="noopener">📎 ${escapeHtml(att.name || 'file')}</a></div>`;
+    }).join('');
 
-  await logChannel.send({ embeds: [embed], files: [attachment] });
+    const embedHtml = msg.embeds.map((emb) => {
+      const col   = emb.color ? `#${emb.color.toString(16).padStart(6, '0')}` : '#5865f2';
+      const title = emb.title ? `<div class="emb-title">${escapeHtml(emb.title)}</div>` : '';
+      const desc  = emb.description ? `<div class="emb-desc">${escapeHtml(emb.description)}</div>` : '';
+      return `<div class="emb-wrap"><div class="emb" style="border-left-color:${col}">${title}${desc}</div></div>`;
+    }).join('');
+
+    if (grouped) {
+      msgLines.push(`<div class="msg"><div class="av-ph"></div><div class="body">${contentHtml}${attachHtml}${embedHtml}</div></div>`);
+    } else {
+      msgLines.push(`<div class="msg new-grp"><img class="av" src="${escapeHtml(avatarUrl)}" alt="${username}" onerror="this.style.display='none'"><div class="body"><div class="hdr"><span class="uname">${username}</span><span class="ts">${escapeHtml(ts)}</span></div>${contentHtml}${attachHtml}${embedHtml}</div></div>`);
+    }
+  }
+
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Transcript #${ticket.ticket_id} — ${escapeHtml(panelName)}</title><style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#313338;color:#dbdee1;font-family:'gg sans','Noto Sans',Whitney,Helvetica,Arial,sans-serif;font-size:16px}
+.hd{background:#1e1f22;padding:14px 20px;border-bottom:2px solid #111214;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.hd h1{font-size:18px;color:#fff;font-weight:700;margin-right:4px;white-space:nowrap}
+.badge{background:#2b2d31;border-radius:4px;padding:3px 9px;font-size:12px;color:#b5bac1;white-space:nowrap}
+.badge b{color:#fff;font-weight:600}
+.qa-section{background:#2b2d31;border-radius:8px;margin:14px 16px;padding:14px}
+.qa-section h2{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#b5bac1;margin-bottom:10px;font-weight:700}
+.qa-item{margin-bottom:8px}
+.qa-q{font-weight:600;color:#dbdee1;font-size:14px}
+.qa-a{color:#b5bac1;font-size:14px;margin-top:2px;white-space:pre-wrap}
+.msgs{padding:8px 0 20px}
+.msg{display:flex;gap:14px;padding:2px 14px}
+.msg:hover{background:#2e3035}
+.msg.new-grp{margin-top:17px}
+.av{width:40px;height:40px;border-radius:50%;flex-shrink:0;margin-top:1px;object-fit:cover}
+.av-ph{width:40px;flex-shrink:0}
+.body{flex:1;min-width:0}
+.hdr{display:flex;align-items:baseline;gap:8px;margin-bottom:2px}
+.uname{font-weight:600;color:#fff;font-size:16px}
+.ts{font-size:12px;color:#87898c}
+.text{color:#dbdee1;line-height:1.375;word-wrap:break-word;white-space:pre-wrap}
+.att{margin-top:4px}.att img{max-width:400px;max-height:300px;border-radius:4px;display:block;margin-top:2px}
+.att a{color:#00a8fc;text-decoration:none}.att a:hover{text-decoration:underline}
+.emb-wrap{margin-top:4px;max-width:520px}.emb{border-left:4px solid #5865f2;background:#2b2d31;border-radius:0 4px 4px 0;padding:8px 12px}
+.emb-title{font-weight:700;color:#fff;margin-bottom:4px;font-size:15px}
+.emb-desc{color:#dbdee1;font-size:14px;white-space:pre-wrap;line-height:1.375}
+</style></head><body>
+<div class="hd">
+  <h1>🎫 Ticket #${ticket.ticket_id} — ${escapeHtml(panelName)}</h1>
+  <div class="badge">GUILD <b>${escapeHtml(guild?.name || '')}</b></div>
+  <div class="badge">OPENED BY <b>${escapeHtml(openedByName)}</b></div>
+  <div class="badge">CLOSED BY <b>${escapeHtml(closedByName)}</b></div>
+  <div class="badge">OPENED <b>${escapeHtml(openedAt)}</b></div>
+  <div class="badge">CLOSED <b>${escapeHtml(closedAt)}</b></div>
+  ${reason ? `<div class="badge">REASON <b>${escapeHtml(reason)}</b></div>` : ''}
+  <div class="badge">MESSAGES <b>${messages.length}</b></div>
+</div>
+${qaHtml}
+<div class="msgs">${msgLines.join('')}</div>
+</body></html>`;
 }
 
 // ───── /ticket log handler ─────
@@ -940,7 +1068,8 @@ async function createTicketChannel(interaction, panel, answers) {
   const owner = interaction.user;
   const g = db.guild(guild.id);
 
-  const counter = db.nextTicketNumber(guild.id, panel.panel_id);
+  const counter  = db.nextTicketNumber(guild.id, panel.panel_id);
+  const ticketId = db.nextGlobalTicketId(guild.id);
   await db.save();
 
   const name = slugChannelName(panel.panel_id, counter);
@@ -963,6 +1092,7 @@ async function createTicketChannel(interaction, panel, answers) {
   }
 
   g.tickets[channel.id] = {
+    ticket_id: ticketId,
     channel_id: channel.id,
     user_id: owner.id,
     panel_id: panel.panel_id,
@@ -973,6 +1103,24 @@ async function createTicketChannel(interaction, panel, answers) {
     created_at: Date.now(),
   };
   await db.save();
+
+  // Log "Ticket Opened"
+  if (g.log_ticket_channel_id) {
+    guild.client.channels.fetch(g.log_ticket_channel_id).then((logCh) => {
+      const openedEmbed = new EmbedBuilder()
+        .setColor(EMBED_COLOR_OK)
+        .setTitle('🎫 Ticket Opened')
+        .addFields(
+          { name: 'Ticket ID', value: `#${ticketId}`, inline: true },
+          { name: 'Panel', value: truncate(panel.panel_id, DISCORD_LIMITS.EMBED_FIELD_VALUE), inline: true },
+          { name: 'Opened by', value: `<@${owner.id}>`, inline: true },
+          { name: 'Channel', value: `<#${channel.id}>`, inline: true },
+          { name: 'Time', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: true },
+        )
+        .setTimestamp();
+      return logCh.send({ embeds: [openedEmbed] });
+    }).catch((e) => console.error('[tickets] open log failed:', e?.message));
+  }
 
   const embed = new EmbedBuilder()
     .setColor(EMBED_COLOR_BRAND)
@@ -1020,11 +1168,13 @@ async function createTicketChannel(interaction, panel, answers) {
   return channel;
 }
 
-async function closeTicket(interaction, ticket) {
+async function closeTicket(interaction, ticket, reason) {
   const g = db.guild(interaction.guildId);
-  const logChannelId = g.log_ticket_channel_id;
-  const panel = g.panels[ticket.panel_id] || null;
-  const channelName = interaction.channel.name;
+  const logChannelId  = g.log_ticket_channel_id;
+  const panel         = g.panels[ticket.panel_id] || null;
+  const channelName   = interaction.channel.name;
+  const ticketId      = ticket.ticket_id ?? null;
+  const closedBy      = interaction.user;
 
   delete g.tickets[interaction.channel.id];
   await db.save();
@@ -1032,47 +1182,89 @@ async function closeTicket(interaction, ticket) {
   const ackEmbed = new EmbedBuilder()
     .setColor(EMBED_COLOR_WARN)
     .setTitle(truncate('Ticket closing', DISCORD_LIMITS.EMBED_TITLE))
-    .setDescription(truncate(`Closed by <@${interaction.user.id}>. This channel will be deleted in 5 seconds.`, DISCORD_LIMITS.EMBED_DESCRIPTION));
+    .setDescription(truncate(`Closed by <@${closedBy.id}>. This channel will be deleted in 5 seconds.`, DISCORD_LIMITS.EMBED_DESCRIPTION));
 
-  try {
-    if (interaction.isButton()) {
-      await interaction.update({ embeds: [ackEmbed], components: [] }).catch(async () => {
-        await interaction.reply({ embeds: [ackEmbed] }).catch(() => {});
-      });
-    } else {
-      await safeReply(interaction, { embeds: [ackEmbed] });
-    }
-  } catch (e) {
-    console.warn('[tickets] close ack failed:', e?.message);
-  }
+  await safeReply(interaction, { embeds: [ackEmbed] });
 
   const channel = interaction.channel;
-  const client = interaction.client;
+  const client  = interaction.client;
+  const guild   = interaction.guild;
 
-  // Background: fetch transcript → wait 5s → send transcript → delete channel
   (async () => {
-    let transcriptText = null;
-    if (logChannelId) {
+    // Generate HTML transcript
+    let transcriptKey  = null;
+    let transcriptPath = null;
+    let transcriptUrl  = null;
+
+    if (logChannelId && ticketId != null) {
       try {
         const messages = await fetchAllMessages(channel);
-        transcriptText = formatTranscript(messages, ticket, panel, interaction.guild?.name || interaction.guildId);
+        const html = generateHtmlTranscript(messages, ticket, panel, guild, closedBy, reason);
+        const dir  = path.join(__dirname, '..', 'data', 'transcripts');
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        transcriptKey  = `${guild.id}_${ticketId}`;
+        transcriptPath = path.join(dir, `${transcriptKey}.html`);
+        fs.writeFileSync(transcriptPath, html, 'utf8');
+        transcriptUrl  = `${TRANSCRIPT_BASE_URL}/transcripts/${transcriptKey}`;
+        const expiresAt = Date.now() + 3 * 24 * 60 * 60 * 1000;
+        tdb.set(transcriptKey, {
+          ticket_id: ticketId, guild_id: guild.id,
+          path: transcriptPath, permanent: false, expires_at: expiresAt,
+          log_message_id: null, log_channel_id: logChannelId,
+        });
+        await tdb.save();
       } catch (e) {
-        console.error('[tickets] transcript fetch failed:', e?.message);
+        console.error('[tickets] transcript generation failed:', e?.message);
       }
     }
 
     await new Promise((r) => setTimeout(r, 5000));
 
-    if (logChannelId && transcriptText) {
+    // Send close log embed
+    if (logChannelId) {
       try {
-        await sendTranscript(client, logChannelId, transcriptText, ticket, panel, channelName);
+        const logChannel = await client.channels.fetch(logChannelId).catch(() => null);
+        if (logChannel) {
+          const closedEmbed = new EmbedBuilder()
+            .setColor(0xED4245)
+            .setTitle('🔒 Ticket Closed')
+            .addFields(
+              { name: 'Ticket ID', value: ticketId != null ? `#${ticketId}` : 'N/A', inline: true },
+              { name: 'Panel', value: truncate(panel?.panel_id || 'unknown', DISCORD_LIMITS.EMBED_FIELD_VALUE), inline: true },
+              { name: 'Channel', value: truncate(channelName, DISCORD_LIMITS.EMBED_FIELD_VALUE), inline: true },
+              { name: 'Opened by', value: `<@${ticket.user_id}>`, inline: true },
+              { name: 'Closed by', value: `<@${closedBy.id}>`, inline: true },
+              { name: 'Reason', value: truncate(reason || 'No reason provided', DISCORD_LIMITS.EMBED_FIELD_VALUE), inline: true },
+              { name: 'Opened at', value: `<t:${Math.floor(ticket.created_at / 1000)}:F>`, inline: true },
+              { name: 'Closed at', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: true },
+            )
+            .setFooter({ text: transcriptPath ? 'Transcript auto-deletes in 3 days' : 'No transcript log channel configured' })
+            .setTimestamp();
+
+          const components = [];
+          if (transcriptKey && transcriptUrl) {
+            components.push(new ActionRowBuilder().addComponents(
+              new ButtonBuilder().setLabel('🌐 View Transcript').setStyle(ButtonStyle.Link).setURL(transcriptUrl),
+              new ButtonBuilder()
+                .setCustomId(`${IDS.TICKET_SAVE_TRANSCRIPT}:${transcriptKey}`)
+                .setLabel('💾 Save Transcript')
+                .setStyle(ButtonStyle.Secondary),
+            ));
+          }
+
+          const logMsg = await logChannel.send({ embeds: [closedEmbed], components });
+          if (transcriptKey) {
+            const meta = tdb.get(transcriptKey);
+            if (meta) { meta.log_message_id = logMsg.id; await tdb.save(); }
+          }
+        }
       } catch (e) {
-        console.error('[tickets] transcript send failed:', e?.message);
+        console.error('[tickets] close log failed:', e?.message);
       }
     }
 
     try {
-      await channel.delete(`Ticket closed by ${interaction.user.tag}`);
+      await channel.delete(`Ticket closed by ${closedBy.username}`);
     } catch (e) {
       console.error('[tickets] delete channel failed:', e?.message);
     }
@@ -1082,6 +1274,23 @@ async function closeTicket(interaction, ticket) {
 // ───── Event dispatcher ─────
 
 function register(client) {
+  // Clean up expired transcripts on startup
+  client.once('ready', async () => {
+    let cleaned = 0;
+    const now = Date.now();
+    for (const [key, meta] of Object.entries(tdb.all())) {
+      if (!meta.permanent && meta.expires_at && meta.expires_at < now) {
+        try { if (fs.existsSync(meta.path)) fs.unlinkSync(meta.path); } catch {}
+        tdb.remove(key);
+        cleaned++;
+      }
+    }
+    if (cleaned > 0) {
+      await tdb.save().catch(() => {});
+      console.log(`[tickets] cleaned up ${cleaned} expired transcript(s)`);
+    }
+  });
+
   client.on('interactionCreate', async (interaction) => {
     try {
       if (interaction.isChatInputCommand() && interaction.commandName === 'ticket') {
@@ -1108,11 +1317,12 @@ function register(client) {
 
       if (interaction.isButton()) {
         const id = interaction.customId;
-        if (id.startsWith(`${IDS.PANEL_BUTTON}:`)) return await onPanelClick(interaction);
-        if (id === IDS.TICKET_CLOSE)               return await onCloseClick(interaction);
-        if (id === IDS.TICKET_REQUEST_CLOSE)       return await onRequestCloseClick(interaction);
-        if (id === IDS.TICKET_CONFIRM_CLOSE)       return await onConfirmCloseClick(interaction);
-        if (id === IDS.TICKET_CANCEL_CLOSE)        return await onCancelCloseClick(interaction);
+        if (id.startsWith(`${IDS.PANEL_BUTTON}:`))           return await onPanelClick(interaction);
+        if (id === IDS.TICKET_CLOSE)                         return await onCloseClick(interaction);
+        if (id === IDS.TICKET_REQUEST_CLOSE)                 return await onRequestCloseClick(interaction);
+        if (id === IDS.TICKET_CONFIRM_CLOSE)                 return await onConfirmCloseClick(interaction);
+        if (id === IDS.TICKET_CANCEL_CLOSE)                  return await onCancelCloseClick(interaction);
+        if (id.startsWith(`${IDS.TICKET_SAVE_TRANSCRIPT}:`)) return await onSaveTranscriptClick(interaction);
         return;
       }
 
@@ -1123,9 +1333,10 @@ function register(client) {
 
       if (interaction.isModalSubmit()) {
         const id = interaction.customId;
-        if (id === IDS.DESCRIPTION_MODAL)             return await onDescriptionModal(interaction);
-        if (id === IDS.SETUP_MODAL)                   return await onSetupModal(interaction);
-        if (id.startsWith(`${IDS.PANEL_MODAL}:`))     return await onPanelModal(interaction);
+        if (id === IDS.DESCRIPTION_MODAL)                   return await onDescriptionModal(interaction);
+        if (id === IDS.SETUP_MODAL)                         return await onSetupModal(interaction);
+        if (id.startsWith(`${IDS.PANEL_MODAL}:`))           return await onPanelModal(interaction);
+        if (id.startsWith(`${IDS.CLOSE_REASON_MODAL}:`))    return await onCloseReasonModal(interaction);
         return;
       }
     } catch (err) {
