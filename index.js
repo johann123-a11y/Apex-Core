@@ -5,13 +5,21 @@ const { TOKEN, CLIENT_ID, DEV_GUILD_ID } = require('./config');
 
 const staff = require('./modules/staff');
 const tickets = require('./modules/tickets');
+const logging = require('./modules/logging');
 
-const modules = [staff, tickets];
+const modules = [staff, tickets, logging];
 
 function buildClient() {
   return new Client({
-    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildMessages],
-    partials: [Partials.Channel],
+    intents: [
+      GatewayIntentBits.Guilds,
+      GatewayIntentBits.GuildMembers,
+      GatewayIntentBits.GuildMessages,
+      GatewayIntentBits.MessageContent,   // privileged — enable in Dev Portal
+      GatewayIntentBits.GuildVoiceStates,
+      GatewayIntentBits.GuildModeration,
+    ],
+    partials: [Partials.Channel, Partials.Message, Partials.GuildMember, Partials.User],
   });
 }
 
