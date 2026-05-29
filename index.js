@@ -6,8 +6,9 @@ const { TOKEN, CLIENT_ID, DEV_GUILD_ID } = require('./config');
 const staff = require('./modules/staff');
 const tickets = require('./modules/tickets');
 const logging = require('./modules/logging');
+const moderation = require('./modules/moderation');
 
-const modules = [staff, tickets, logging];
+const modules = [staff, tickets, logging, moderation];
 
 function buildClient() {
   return new Client({
