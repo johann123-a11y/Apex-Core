@@ -6,6 +6,8 @@ services:
     env_file: .env
     ports:
       - "3003:3003"
+    volumes:
+      - ./data:/app/data
     networks:
       - vps-shared
 
