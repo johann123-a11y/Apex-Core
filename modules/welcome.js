@@ -24,7 +24,7 @@ const WELCOME_EDIT_BTN  = 'apex:welcome_edit';
 const WELCOME_DEL_BTN   = 'apex:welcome_del';
 const STICK_MODAL_ID    = 'apex:stick_modal';
 
-const PLACEHOLDER_HINT = '`{user}` Erwähnung · `{username}` Name · `{server}` Servername · `{count}` Member-Anzahl';
+const PLACEHOLDER_HINT = '`{user}` mention · `{username}` name · `{server}` server name · `{count}` member count';
 
 function resolvePlaceholders(template, member) {
   return template
@@ -40,101 +40,101 @@ function resolvePlaceholders(template, member) {
 
 const welcomeCommand = new SlashCommandBuilder()
   .setName('welcome')
-  .setDescription('Willkommensnachrichten verwalten')
+  .setDescription('Manage welcome messages')
   .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
   .setDMPermission(false)
-  .addSubcommand((s) => s.setName('set').setDescription('Willkommensnachricht setzen (Platzhalter erlaubt)'))
+  .addSubcommand((s) => s.setName('set').setDescription('Set the welcome message (placeholders supported)'))
   .addSubcommand((s) =>
-    s.setName('channel').setDescription('Willkommens-Channel setzen')
+    s.setName('channel').setDescription('Set the welcome channel')
       .addChannelOption((o) => o.setName('channel').setDescription('Channel').setRequired(true)),
   )
-  .addSubcommand((s) => s.setName('info').setDescription('Aktuelle Einstellungen anzeigen'))
-  .addSubcommand((s) => s.setName('test').setDescription('Willkommensnachricht mit dir selbst testen'));
+  .addSubcommand((s) => s.setName('info').setDescription('Show current welcome settings'))
+  .addSubcommand((s) => s.setName('test').setDescription('Test the welcome message with yourself'));
 
 function buildWelcomeModal(existing) {
-  const modal = new ModalBuilder().setCustomId(WELCOME_MODAL_ID).setTitle('Willkommensnachricht');
+  const modal = new ModalBuilder().setCustomId(WELCOME_MODAL_ID).setTitle('Welcome Message');
   const input = new TextInputBuilder()
     .setCustomId('message')
-    .setLabel(truncate('Nachricht (Platzhalter erlaubt)', DISCORD_LIMITS.TEXT_INPUT_LABEL))
+    .setLabel(truncate('Message (placeholders supported)', DISCORD_LIMITS.TEXT_INPUT_LABEL))
     .setStyle(TextInputStyle.Paragraph)
     .setRequired(true)
     .setMaxLength(2000)
-    .setPlaceholder('Willkommen {user} auf {server}! Du bist Member #{count}.');
+    .setPlaceholder('Welcome {user} to {server}! You are member #{count}.');
   if (existing) input.setValue(truncate(existing, 2000));
   modal.addComponents(new ActionRowBuilder().addComponents(input));
   return modal;
 }
 
 async function handleWelcomeSet(interaction) {
-  if (!checks.isAdmin(interaction.member)) return interaction.reply({ content: 'Nur Admins.', flags: MessageFlags.Ephemeral });
+  if (!checks.isAdmin(interaction.member)) return interaction.reply({ content: 'Admins only.', flags: MessageFlags.Ephemeral });
   const g = db.guild(interaction.guildId);
   return interaction.showModal(buildWelcomeModal(g.welcome?.message));
 }
 
 async function handleWelcomeChannel(interaction) {
-  if (!checks.isAdmin(interaction.member)) return interaction.reply({ content: 'Nur Admins.', flags: MessageFlags.Ephemeral });
+  if (!checks.isAdmin(interaction.member)) return interaction.reply({ content: 'Admins only.', flags: MessageFlags.Ephemeral });
   const ch = interaction.options.getChannel('channel', true);
-  if (!ch.isTextBased() || ch.isDMBased()) return interaction.reply({ content: 'Bitte einen Text-Channel wählen.', flags: MessageFlags.Ephemeral });
+  if (!ch.isTextBased() || ch.isDMBased()) return interaction.reply({ content: 'Please select a text channel in this server.', flags: MessageFlags.Ephemeral });
   const g = db.guild(interaction.guildId);
   if (!g.welcome) g.welcome = { channel_id: null, message: null };
   g.welcome.channel_id = ch.id;
   await db.save();
-  return interaction.reply({ content: `Willkommens-Channel gesetzt: ${ch}`, flags: MessageFlags.Ephemeral });
+  return interaction.reply({ content: `Welcome channel set to ${ch}.`, flags: MessageFlags.Ephemeral });
 }
 
 async function handleWelcomeInfo(interaction) {
-  if (!checks.isAdmin(interaction.member)) return interaction.reply({ content: 'Nur Admins.', flags: MessageFlags.Ephemeral });
+  if (!checks.isAdmin(interaction.member)) return interaction.reply({ content: 'Admins only.', flags: MessageFlags.Ephemeral });
   const g = db.guild(interaction.guildId);
   const w = g.welcome;
 
   const embed = new EmbedBuilder()
     .setColor(C.BRAND)
-    .setTitle('👋 Willkommensnachrichten')
+    .setTitle('👋 Welcome Messages')
     .addFields(
-      { name: 'Channel',      value: w?.channel_id ? `<#${w.channel_id}>` : '_Nicht gesetzt_', inline: true },
-      { name: 'Nachricht',    value: w?.message ? `\`\`\`${truncate(w.message, 600)}\`\`\`` : '_Nicht gesetzt_', inline: false },
-      { name: 'Platzhalter',  value: PLACEHOLDER_HINT, inline: false },
+      { name: 'Channel',      value: w?.channel_id ? `<#${w.channel_id}>` : '_Not set_', inline: true },
+      { name: 'Message',      value: w?.message ? `\`\`\`${truncate(w.message, 600)}\`\`\`` : '_Not set_', inline: false },
+      { name: 'Placeholders', value: PLACEHOLDER_HINT, inline: false },
     )
     .setTimestamp();
 
   const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(WELCOME_EDIT_BTN).setLabel('✏️ Bearbeiten').setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId(WELCOME_DEL_BTN).setLabel('🗑️ Löschen').setStyle(ButtonStyle.Danger),
+    new ButtonBuilder().setCustomId(WELCOME_EDIT_BTN).setLabel('✏️ Edit').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId(WELCOME_DEL_BTN).setLabel('🗑️ Delete').setStyle(ButtonStyle.Danger),
   );
 
   return interaction.reply({ embeds: [embed], components: [row], flags: MessageFlags.Ephemeral });
 }
 
 async function handleWelcomeTest(interaction) {
-  if (!checks.isAdmin(interaction.member)) return interaction.reply({ content: 'Nur Admins.', flags: MessageFlags.Ephemeral });
+  if (!checks.isAdmin(interaction.member)) return interaction.reply({ content: 'Admins only.', flags: MessageFlags.Ephemeral });
   const g = db.guild(interaction.guildId);
-  if (!g.welcome?.message) return interaction.reply({ content: 'Keine Willkommensnachricht gesetzt. Nutze `/welcome set`.', flags: MessageFlags.Ephemeral });
+  if (!g.welcome?.message) return interaction.reply({ content: 'No welcome message set. Use `/welcome set`.', flags: MessageFlags.Ephemeral });
   const text = resolvePlaceholders(g.welcome.message, interaction.member);
   return interaction.reply({ content: text, flags: MessageFlags.Ephemeral });
 }
 
 async function onWelcomeModal(interaction) {
-  if (!checks.isAdmin(interaction.member)) return interaction.reply({ content: 'Nur Admins.', flags: MessageFlags.Ephemeral });
+  if (!checks.isAdmin(interaction.member)) return interaction.reply({ content: 'Admins only.', flags: MessageFlags.Ephemeral });
   const message = interaction.fields.getTextInputValue('message').trim();
   const g = db.guild(interaction.guildId);
   if (!g.welcome) g.welcome = { channel_id: null, message: null };
   g.welcome.message = message;
   await db.save();
-  return interaction.reply({ content: `✅ Willkommensnachricht gespeichert.\n${PLACEHOLDER_HINT}`, flags: MessageFlags.Ephemeral });
+  return interaction.reply({ content: `✅ Welcome message saved.\n${PLACEHOLDER_HINT}`, flags: MessageFlags.Ephemeral });
 }
 
 async function onWelcomeEditBtn(interaction) {
-  if (!checks.isAdmin(interaction.member)) return interaction.reply({ content: 'Nur Admins.', flags: MessageFlags.Ephemeral });
+  if (!checks.isAdmin(interaction.member)) return interaction.reply({ content: 'Admins only.', flags: MessageFlags.Ephemeral });
   const g = db.guild(interaction.guildId);
   return interaction.showModal(buildWelcomeModal(g.welcome?.message));
 }
 
 async function onWelcomeDelBtn(interaction) {
-  if (!checks.isAdmin(interaction.member)) return interaction.reply({ content: 'Nur Admins.', flags: MessageFlags.Ephemeral });
+  if (!checks.isAdmin(interaction.member)) return interaction.reply({ content: 'Admins only.', flags: MessageFlags.Ephemeral });
   const g = db.guild(interaction.guildId);
   g.welcome = { channel_id: null, message: null };
   await db.save();
-  return interaction.update({ content: '🗑️ Willkommens-Einstellungen gelöscht.', embeds: [], components: [] });
+  return interaction.update({ content: '🗑️ Welcome settings deleted.', embeds: [], components: [] });
 }
 
 async function onMemberJoin(client, member) {
@@ -156,22 +156,22 @@ async function onMemberJoin(client, member) {
 
 const stickCommand = new SlashCommandBuilder()
   .setName('stick')
-  .setDescription('Sticky-Nachrichten verwalten')
+  .setDescription('Manage sticky messages')
   .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
   .setDMPermission(false)
-  .addSubcommand((s) => s.setName('set').setDescription('Sticky-Nachricht für diesen Channel setzen'))
-  .addSubcommand((s) => s.setName('remove').setDescription('Sticky-Nachricht aus diesem Channel entfernen'))
-  .addSubcommand((s) => s.setName('info').setDescription('Alle Sticky-Nachrichten anzeigen'));
+  .addSubcommand((s) => s.setName('set').setDescription('Set a sticky message for this channel'))
+  .addSubcommand((s) => s.setName('remove').setDescription('Remove the sticky message from this channel'))
+  .addSubcommand((s) => s.setName('info').setDescription('Show all sticky messages'));
 
 async function handleStickSet(interaction) {
-  if (!checks.isAdmin(interaction.member)) return interaction.reply({ content: 'Nur Admins.', flags: MessageFlags.Ephemeral });
+  if (!checks.isAdmin(interaction.member)) return interaction.reply({ content: 'Admins only.', flags: MessageFlags.Ephemeral });
   const g = db.guild(interaction.guildId);
   const existing = g.sticky?.[interaction.channel.id]?.content;
 
-  const modal = new ModalBuilder().setCustomId(STICK_MODAL_ID).setTitle('Sticky-Nachricht');
+  const modal = new ModalBuilder().setCustomId(STICK_MODAL_ID).setTitle('Sticky Message');
   const input = new TextInputBuilder()
     .setCustomId('content')
-    .setLabel('Nachricht')
+    .setLabel('Message')
     .setStyle(TextInputStyle.Paragraph)
     .setRequired(true)
     .setMaxLength(2000);
@@ -181,10 +181,10 @@ async function handleStickSet(interaction) {
 }
 
 async function handleStickRemove(interaction) {
-  if (!checks.isAdmin(interaction.member)) return interaction.reply({ content: 'Nur Admins.', flags: MessageFlags.Ephemeral });
+  if (!checks.isAdmin(interaction.member)) return interaction.reply({ content: 'Admins only.', flags: MessageFlags.Ephemeral });
   const g = db.guild(interaction.guildId);
   const entry = g.sticky?.[interaction.channel.id];
-  if (!entry) return interaction.reply({ content: 'Kein Sticky in diesem Channel.', flags: MessageFlags.Ephemeral });
+  if (!entry) return interaction.reply({ content: 'No sticky message in this channel.', flags: MessageFlags.Ephemeral });
 
   if (entry.message_id) {
     const old = await interaction.channel.messages.fetch(entry.message_id).catch(() => null);
@@ -193,19 +193,19 @@ async function handleStickRemove(interaction) {
 
   delete g.sticky[interaction.channel.id];
   await db.save();
-  return interaction.reply({ content: '🗑️ Sticky entfernt.', flags: MessageFlags.Ephemeral });
+  return interaction.reply({ content: '🗑️ Sticky removed.', flags: MessageFlags.Ephemeral });
 }
 
 async function handleStickInfo(interaction) {
-  if (!checks.isAdmin(interaction.member)) return interaction.reply({ content: 'Nur Admins.', flags: MessageFlags.Ephemeral });
+  if (!checks.isAdmin(interaction.member)) return interaction.reply({ content: 'Admins only.', flags: MessageFlags.Ephemeral });
   const g = db.guild(interaction.guildId);
   const entries = Object.entries(g.sticky || {});
 
-  if (!entries.length) return interaction.reply({ content: 'Keine Sticky-Nachrichten konfiguriert.', flags: MessageFlags.Ephemeral });
+  if (!entries.length) return interaction.reply({ content: 'No sticky messages configured.', flags: MessageFlags.Ephemeral });
 
   const embed = new EmbedBuilder()
     .setColor(C.BRAND)
-    .setTitle('📌 Sticky-Nachrichten')
+    .setTitle('📌 Sticky Messages')
     .setTimestamp();
 
   for (const [channelId, data] of entries.slice(0, 20)) {
@@ -220,7 +220,7 @@ async function handleStickInfo(interaction) {
 }
 
 async function onStickModal(interaction) {
-  if (!checks.isAdmin(interaction.member)) return interaction.reply({ content: 'Nur Admins.', flags: MessageFlags.Ephemeral });
+  if (!checks.isAdmin(interaction.member)) return interaction.reply({ content: 'Admins only.', flags: MessageFlags.Ephemeral });
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   const content = interaction.fields.getTextInputValue('content').trim();
@@ -229,25 +229,23 @@ async function onStickModal(interaction) {
   const channelId = interaction.channel.id;
   const old = g.sticky[channelId];
 
-  // Delete previous sticky message
   if (old?.message_id) {
     const oldMsg = await interaction.channel.messages.fetch(old.message_id).catch(() => null);
     if (oldMsg) await oldMsg.delete().catch(() => {});
   }
 
-  // Send new sticky
   let newId = null;
   try {
     const sent = await interaction.channel.send({ content: `📌 ${content}` });
     newId = sent.id;
   } catch (e) {
-    await interaction.editReply({ content: `Fehler beim Senden: ${e?.message}` });
+    await interaction.editReply({ content: `Failed to send: ${e?.message}` });
     return;
   }
 
   g.sticky[channelId] = { content, message_id: newId };
   await db.save();
-  await interaction.editReply({ content: '📌 Sticky gesetzt.' });
+  await interaction.editReply({ content: '📌 Sticky set.' });
 }
 
 // Per-channel lock to prevent concurrent re-posts
@@ -266,13 +264,11 @@ async function onMessageCreate(client, message) {
   stickyLock.add(channelId);
 
   try {
-    // Delete old sticky
     if (entry.message_id) {
       const old = await message.channel.messages.fetch(entry.message_id).catch(() => null);
       if (old) await old.delete().catch(() => {});
     }
 
-    // Post new sticky
     const sent = await message.channel.send({ content: `📌 ${entry.content}` });
     entry.message_id = sent.id;
     await db.save();
@@ -317,7 +313,7 @@ function register(client) {
       }
     } catch (err) {
       console.error('[welcome] error:', err);
-      const opts = { content: 'Etwas ist schiefgelaufen.', flags: MessageFlags.Ephemeral };
+      const opts = { content: 'Something went wrong.', flags: MessageFlags.Ephemeral };
       try {
         if (interaction.replied || interaction.deferred) await interaction.followUp(opts);
         else if (interaction.isRepliable?.()) await interaction.reply(opts);

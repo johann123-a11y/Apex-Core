@@ -31,109 +31,109 @@ const EMBED_MODAL_ID = 'apex:embed_modal';
 
 const banCommand = new SlashCommandBuilder()
   .setName('ban')
-  .setDescription('Einen User bannen')
+  .setDescription('Ban a user from the server')
   .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
   .setDMPermission(false)
-  .addUserOption((o) => o.setName('user').setDescription('Zu bannender User').setRequired(true))
-  .addStringOption((o) => o.setName('reason').setDescription('Grund').setRequired(false).setMaxLength(512));
+  .addUserOption((o) => o.setName('user').setDescription('User to ban').setRequired(true))
+  .addStringOption((o) => o.setName('reason').setDescription('Reason').setRequired(false).setMaxLength(512));
 
 const kickCommand = new SlashCommandBuilder()
   .setName('kick')
-  .setDescription('Einen User kicken')
+  .setDescription('Kick a user from the server')
   .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
   .setDMPermission(false)
-  .addUserOption((o) => o.setName('user').setDescription('Zu kickender User').setRequired(true))
-  .addStringOption((o) => o.setName('reason').setDescription('Grund').setRequired(false).setMaxLength(512));
+  .addUserOption((o) => o.setName('user').setDescription('User to kick').setRequired(true))
+  .addStringOption((o) => o.setName('reason').setDescription('Reason').setRequired(false).setMaxLength(512));
 
 const muteCommand = new SlashCommandBuilder()
   .setName('mute')
-  .setDescription('Einen Member per Timeout muten')
+  .setDescription('Mute a member using a timeout')
   .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
   .setDMPermission(false)
-  .addUserOption((o) => o.setName('user').setDescription('Zu mutender Member').setRequired(true))
-  .addIntegerOption((o) => o.setName('duration').setDescription('Dauer in Minuten (Standard: 60)').setRequired(false).setMinValue(1).setMaxValue(40320))
-  .addStringOption((o) => o.setName('reason').setDescription('Grund').setRequired(false).setMaxLength(512));
+  .addUserOption((o) => o.setName('user').setDescription('Member to mute').setRequired(true))
+  .addIntegerOption((o) => o.setName('duration').setDescription('Duration in minutes (default: 60)').setRequired(false).setMinValue(1).setMaxValue(40320))
+  .addStringOption((o) => o.setName('reason').setDescription('Reason').setRequired(false).setMaxLength(512));
 
 const purgeCommand = new SlashCommandBuilder()
   .setName('purge')
-  .setDescription('Nachrichten eines bestimmten Users löschen')
+  .setDescription("Delete a specific user's messages")
   .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
   .setDMPermission(false)
-  .addUserOption((o) => o.setName('user').setDescription('User dessen Nachrichten gelöscht werden').setRequired(true))
-  .addIntegerOption((o) => o.setName('amount').setDescription('Anzahl zu löschender Nachrichten (max 100)').setRequired(true).setMinValue(1).setMaxValue(100));
+  .addUserOption((o) => o.setName('user').setDescription('User whose messages to delete').setRequired(true))
+  .addIntegerOption((o) => o.setName('amount').setDescription('Number of messages to delete (max 100)').setRequired(true).setMinValue(1).setMaxValue(100));
 
 const clearCommand = new SlashCommandBuilder()
   .setName('clear')
-  .setDescription('Eine bestimmte Anzahl Nachrichten löschen')
+  .setDescription('Delete a number of messages from this channel')
   .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
   .setDMPermission(false)
-  .addIntegerOption((o) => o.setName('amount').setDescription('Anzahl zu löschender Nachrichten (max 100)').setRequired(true).setMinValue(1).setMaxValue(100));
+  .addIntegerOption((o) => o.setName('amount').setDescription('Number of messages to delete (max 100)').setRequired(true).setMinValue(1).setMaxValue(100));
 
 const lockCommand = new SlashCommandBuilder()
   .setName('lock')
-  .setDescription('Channel für alle non-Staff sperren')
+  .setDescription('Lock this channel for non-staff')
   .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels)
   .setDMPermission(false);
 
 const unlockCommand = new SlashCommandBuilder()
   .setName('unlock')
-  .setDescription('Channel wieder entsperren')
+  .setDescription('Unlock this channel')
   .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels)
   .setDMPermission(false);
 
 const embedCommand = new SlashCommandBuilder()
   .setName('embed')
-  .setDescription('Eine Embed-Nachricht senden')
+  .setDescription('Send an embed message')
   .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
   .setDMPermission(false);
 
 const strikesCommand = new SlashCommandBuilder()
   .setName('strikes')
-  .setDescription('Strike-System')
+  .setDescription('Strike system')
   .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
   .setDMPermission(false)
   .addSubcommand((s) =>
-    s.setName('give').setDescription('Einem User einen Strike geben')
+    s.setName('give').setDescription('Give a user a strike')
       .addUserOption((o) => o.setName('user').setDescription('User').setRequired(true))
-      .addStringOption((o) => o.setName('reason').setDescription('Grund').setRequired(false).setMaxLength(512)),
+      .addStringOption((o) => o.setName('reason').setDescription('Reason').setRequired(false).setMaxLength(512)),
   )
   .addSubcommand((s) =>
-    s.setName('remove').setDescription('Einen Strike entfernen')
+    s.setName('remove').setDescription('Remove a strike from a user')
       .addUserOption((o) => o.setName('user').setDescription('User').setRequired(true)),
   )
   .addSubcommand((s) =>
-    s.setName('check').setDescription('Strikes eines Users anzeigen')
+    s.setName('check').setDescription("Check a user's strikes")
       .addUserOption((o) => o.setName('user').setDescription('User').setRequired(true)),
   )
-  .addSubcommand((s) => s.setName('list').setDescription('Alle Strikes anzeigen'));
+  .addSubcommand((s) => s.setName('list').setDescription('List all strikes'));
 
 // ──── /ban ────
 
 async function handleBan(interaction) {
-  if (!checks.isAdmin(interaction.member)) return interaction.reply({ content: 'Nur Admins können bannen.', flags: MessageFlags.Ephemeral });
+  if (!checks.isAdmin(interaction.member)) return interaction.reply({ content: 'Admins only.', flags: MessageFlags.Ephemeral });
 
   const target = interaction.options.getUser('user', true);
   const reason = interaction.options.getString('reason') || null;
 
-  if (target.id === interaction.user.id) return interaction.reply({ content: 'Du kannst dich nicht selbst bannen.', flags: MessageFlags.Ephemeral });
+  if (target.id === interaction.user.id) return interaction.reply({ content: 'You cannot ban yourself.', flags: MessageFlags.Ephemeral });
 
   const member = interaction.guild.members.cache.get(target.id);
-  if (member && !member.bannable) return interaction.reply({ content: 'Dieser User kann nicht gebannt werden (höhere Rolle oder Bot).', flags: MessageFlags.Ephemeral });
+  if (member && !member.bannable) return interaction.reply({ content: 'This user cannot be banned (higher role or bot).', flags: MessageFlags.Ephemeral });
 
   try {
     await interaction.guild.members.ban(target.id, { reason: reason || undefined, deleteMessageSeconds: 0 });
   } catch (e) {
-    return interaction.reply({ content: `Bann fehlgeschlagen: ${e?.message || 'Unbekannt'}`, flags: MessageFlags.Ephemeral });
+    return interaction.reply({ content: `Ban failed: ${e?.message || 'Unknown error'}`, flags: MessageFlags.Ephemeral });
   }
 
   const embed = new EmbedBuilder()
     .setColor(C.RED)
-    .setTitle('🔨 User gebannt')
+    .setTitle('🔨 User Banned')
     .setThumbnail(target.displayAvatarURL())
     .addFields(
-      { name: 'User', value: `${target} (${target.tag})`, inline: true },
-      { name: 'Moderator', value: `${interaction.user} (${interaction.user.tag})`, inline: true },
-      { name: 'Grund', value: truncate(reason || '_Kein Grund angegeben_', DISCORD_LIMITS.EMBED_FIELD_VALUE), inline: false },
+      { name: 'User',      value: `${target} (${target.username})`,                     inline: true },
+      { name: 'Moderator', value: `${interaction.user} (${interaction.user.username})`, inline: true },
+      { name: 'Reason',    value: truncate(reason || '_No reason provided_', DISCORD_LIMITS.EMBED_FIELD_VALUE), inline: false },
     )
     .setFooter({ text: `User ID: ${target.id}` })
     .setTimestamp();
@@ -145,29 +145,29 @@ async function handleBan(interaction) {
 // ──── /kick ────
 
 async function handleKick(interaction) {
-  if (!checks.isAdmin(interaction.member)) return interaction.reply({ content: 'Nur Admins können kicken.', flags: MessageFlags.Ephemeral });
+  if (!checks.isAdmin(interaction.member)) return interaction.reply({ content: 'Admins only.', flags: MessageFlags.Ephemeral });
 
   const target = interaction.options.getMember('user');
-  if (!target) return interaction.reply({ content: 'User nicht im Server gefunden.', flags: MessageFlags.Ephemeral });
-  if (target.id === interaction.user.id) return interaction.reply({ content: 'Du kannst dich nicht selbst kicken.', flags: MessageFlags.Ephemeral });
-  if (!target.kickable) return interaction.reply({ content: 'Dieser User kann nicht gekickt werden (höhere Rolle oder Bot).', flags: MessageFlags.Ephemeral });
+  if (!target) return interaction.reply({ content: 'User not found in this server.', flags: MessageFlags.Ephemeral });
+  if (target.id === interaction.user.id) return interaction.reply({ content: 'You cannot kick yourself.', flags: MessageFlags.Ephemeral });
+  if (!target.kickable) return interaction.reply({ content: 'This user cannot be kicked (higher role or bot).', flags: MessageFlags.Ephemeral });
 
   const reason = interaction.options.getString('reason') || null;
 
   try {
     await target.kick(reason || undefined);
   } catch (e) {
-    return interaction.reply({ content: `Kick fehlgeschlagen: ${e?.message || 'Unbekannt'}`, flags: MessageFlags.Ephemeral });
+    return interaction.reply({ content: `Kick failed: ${e?.message || 'Unknown error'}`, flags: MessageFlags.Ephemeral });
   }
 
   const embed = new EmbedBuilder()
     .setColor(C.ORANGE)
-    .setTitle('👢 User gekickt')
+    .setTitle('👢 User Kicked')
     .setThumbnail(target.user.displayAvatarURL())
     .addFields(
-      { name: 'User', value: `${target.user} (${target.user.tag})`, inline: true },
-      { name: 'Moderator', value: `${interaction.user} (${interaction.user.tag})`, inline: true },
-      { name: 'Grund', value: truncate(reason || '_Kein Grund angegeben_', DISCORD_LIMITS.EMBED_FIELD_VALUE), inline: false },
+      { name: 'User',      value: `${target.user} (${target.user.username})`,           inline: true },
+      { name: 'Moderator', value: `${interaction.user} (${interaction.user.username})`, inline: true },
+      { name: 'Reason',    value: truncate(reason || '_No reason provided_', DISCORD_LIMITS.EMBED_FIELD_VALUE), inline: false },
     )
     .setFooter({ text: `User ID: ${target.id}` })
     .setTimestamp();
@@ -179,12 +179,12 @@ async function handleKick(interaction) {
 // ──── /mute ────
 
 async function handleMute(interaction) {
-  if (!checks.isStaff(interaction.member)) return interaction.reply({ content: 'Nur Staff kann muten.', flags: MessageFlags.Ephemeral });
+  if (!checks.isStaff(interaction.member)) return interaction.reply({ content: 'Staff only.', flags: MessageFlags.Ephemeral });
 
   const target = interaction.options.getMember('user');
-  if (!target) return interaction.reply({ content: 'User nicht im Server gefunden.', flags: MessageFlags.Ephemeral });
-  if (target.id === interaction.user.id) return interaction.reply({ content: 'Du kannst dich nicht selbst muten.', flags: MessageFlags.Ephemeral });
-  if (!target.moderatable) return interaction.reply({ content: 'Dieser User kann nicht gemutet werden.', flags: MessageFlags.Ephemeral });
+  if (!target) return interaction.reply({ content: 'User not found in this server.', flags: MessageFlags.Ephemeral });
+  if (target.id === interaction.user.id) return interaction.reply({ content: 'You cannot mute yourself.', flags: MessageFlags.Ephemeral });
+  if (!target.moderatable) return interaction.reply({ content: 'This user cannot be muted.', flags: MessageFlags.Ephemeral });
 
   const durationMinutes = interaction.options.getInteger('duration') || 60;
   const reason = interaction.options.getString('reason') || null;
@@ -193,19 +193,19 @@ async function handleMute(interaction) {
   try {
     await target.timeout(durationMinutes * 60 * 1000, reason || undefined);
   } catch (e) {
-    return interaction.reply({ content: `Mute fehlgeschlagen: ${e?.message || 'Unbekannt'}`, flags: MessageFlags.Ephemeral });
+    return interaction.reply({ content: `Mute failed: ${e?.message || 'Unknown error'}`, flags: MessageFlags.Ephemeral });
   }
 
   const embed = new EmbedBuilder()
     .setColor(C.ORANGE)
-    .setTitle('🔇 Member gemutet')
+    .setTitle('🔇 Member Muted')
     .setThumbnail(target.user.displayAvatarURL())
     .addFields(
-      { name: 'User', value: `${target.user} (${target.user.tag})`, inline: true },
-      { name: 'Moderator', value: `${interaction.user} (${interaction.user.tag})`, inline: true },
-      { name: 'Dauer', value: `${durationMinutes} Min.`, inline: true },
-      { name: 'Bis', value: `<t:${Math.floor(until.getTime() / 1000)}:F>`, inline: true },
-      { name: 'Grund', value: truncate(reason || '_Kein Grund angegeben_', DISCORD_LIMITS.EMBED_FIELD_VALUE), inline: false },
+      { name: 'User',      value: `${target.user} (${target.user.username})`,           inline: true },
+      { name: 'Moderator', value: `${interaction.user} (${interaction.user.username})`, inline: true },
+      { name: 'Duration',  value: `${durationMinutes} min.`, inline: true },
+      { name: 'Until',     value: `<t:${Math.floor(until.getTime() / 1000)}:F>`, inline: true },
+      { name: 'Reason',    value: truncate(reason || '_No reason provided_', DISCORD_LIMITS.EMBED_FIELD_VALUE), inline: false },
     )
     .setFooter({ text: `User ID: ${target.id}` })
     .setTimestamp();
@@ -217,7 +217,7 @@ async function handleMute(interaction) {
 // ──── /purge ────
 
 async function handlePurge(interaction) {
-  if (!checks.isAdmin(interaction.member)) return interaction.reply({ content: 'Nur Admins können purgen.', flags: MessageFlags.Ephemeral });
+  if (!checks.isAdmin(interaction.member)) return interaction.reply({ content: 'Admins only.', flags: MessageFlags.Ephemeral });
 
   const target = interaction.options.getUser('user', true);
   const amount = interaction.options.getInteger('amount', true);
@@ -232,34 +232,34 @@ async function handlePurge(interaction) {
       .slice(0, amount);
 
     if (!toDelete.length) {
-      return interaction.editReply({ content: `Keine Nachrichten von ${target.tag} gefunden (oder älter als 14 Tage).` });
+      return interaction.editReply({ content: `No messages from ${target.username} found (or older than 14 days).` });
     }
 
     const deleted = await interaction.channel.bulkDelete(toDelete, true);
 
     const embed = new EmbedBuilder()
       .setColor(C.ORANGE)
-      .setTitle('🧹 Purge ausgeführt')
+      .setTitle('🧹 Purge Executed')
       .addFields(
-        { name: 'Target', value: `${target} (${target.tag})`, inline: true },
-        { name: 'Moderator', value: `${interaction.user} (${interaction.user.tag})`, inline: true },
-        { name: 'Gelöscht', value: `${deleted.size}`, inline: true },
-        { name: 'Channel', value: `${interaction.channel}`, inline: true },
+        { name: 'Target',    value: `${target} (${target.username})`,                     inline: true },
+        { name: 'Moderator', value: `${interaction.user} (${interaction.user.username})`, inline: true },
+        { name: 'Deleted',   value: `${deleted.size}`, inline: true },
+        { name: 'Channel',   value: `${interaction.channel}`, inline: true },
       )
       .setFooter({ text: `Target ID: ${target.id}` })
       .setTimestamp();
 
-    await interaction.editReply({ content: `${deleted.size} Nachricht${deleted.size !== 1 ? 'en' : ''} von ${target.tag} gelöscht.` });
+    await interaction.editReply({ content: `${deleted.size} message${deleted.size !== 1 ? 's' : ''} from ${target.username} deleted.` });
     await logger.log(interaction.client, interaction.guildId, embed);
   } catch (e) {
-    await interaction.editReply({ content: `Purge fehlgeschlagen: ${e?.message || 'Unbekannt'}` });
+    await interaction.editReply({ content: `Purge failed: ${e?.message || 'Unknown error'}` });
   }
 }
 
 // ──── /clear ────
 
 async function handleClear(interaction) {
-  if (!checks.isAdmin(interaction.member)) return interaction.reply({ content: 'Nur Admins können clearen.', flags: MessageFlags.Ephemeral });
+  if (!checks.isAdmin(interaction.member)) return interaction.reply({ content: 'Admins only.', flags: MessageFlags.Ephemeral });
 
   const amount = interaction.options.getInteger('amount', true);
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
@@ -269,26 +269,26 @@ async function handleClear(interaction) {
 
     const embed = new EmbedBuilder()
       .setColor(C.ORANGE)
-      .setTitle('🧹 Channel gecleart')
+      .setTitle('🧹 Channel Cleared')
       .addFields(
-        { name: 'Moderator', value: `${interaction.user} (${interaction.user.tag})`, inline: true },
-        { name: 'Gelöscht', value: `${deleted.size}`, inline: true },
-        { name: 'Channel', value: `${interaction.channel}`, inline: true },
+        { name: 'Moderator', value: `${interaction.user} (${interaction.user.username})`, inline: true },
+        { name: 'Deleted',   value: `${deleted.size}`, inline: true },
+        { name: 'Channel',   value: `${interaction.channel}`, inline: true },
       )
-      .setFooter({ text: `Angefragt: ${amount}` })
+      .setFooter({ text: `Requested: ${amount}` })
       .setTimestamp();
 
-    await interaction.editReply({ content: `${deleted.size} Nachricht${deleted.size !== 1 ? 'en' : ''} gelöscht.` });
+    await interaction.editReply({ content: `${deleted.size} message${deleted.size !== 1 ? 's' : ''} deleted.` });
     await logger.log(interaction.client, interaction.guildId, embed);
   } catch (e) {
-    await interaction.editReply({ content: `Clear fehlgeschlagen: ${e?.message || 'Unbekannt'}` });
+    await interaction.editReply({ content: `Clear failed: ${e?.message || 'Unknown error'}` });
   }
 }
 
 // ──── /lock & /unlock ────
 
 async function handleLock(interaction) {
-  if (!checks.isStaff(interaction.member)) return interaction.reply({ content: 'Nur Staff kann den Channel sperren.', flags: MessageFlags.Ephemeral });
+  if (!checks.isStaff(interaction.member)) return interaction.reply({ content: 'Staff only.', flags: MessageFlags.Ephemeral });
 
   const g = db.guild(interaction.guildId);
   const everyone = interaction.guild.roles.everyone;
@@ -297,7 +297,7 @@ async function handleLock(interaction) {
     await interaction.channel.permissionOverwrites.edit(everyone.id, {
       SendMessages: false,
       AddReactions: false,
-    }, { reason: `Locked by ${interaction.user.tag}` });
+    }, { reason: `Locked by ${interaction.user.username}` });
 
     if (g.staff_role_id) {
       await interaction.channel.permissionOverwrites.edit(g.staff_role_id, {
@@ -306,14 +306,14 @@ async function handleLock(interaction) {
       }, { reason: 'Lock — keeping staff access' });
     }
   } catch (e) {
-    return interaction.reply({ content: `Lock fehlgeschlagen: ${e?.message || 'Unbekannt'}`, flags: MessageFlags.Ephemeral });
+    return interaction.reply({ content: `Lock failed: ${e?.message || 'Unknown error'}`, flags: MessageFlags.Ephemeral });
   }
 
   const embed = new EmbedBuilder()
     .setColor(C.RED)
-    .setTitle('🔒 Channel gesperrt')
-    .setDescription(`${interaction.channel} wurde für non-Staff gesperrt.`)
-    .addFields({ name: 'Gesperrt von', value: `${interaction.user} (${interaction.user.tag})`, inline: true })
+    .setTitle('🔒 Channel Locked')
+    .setDescription(`${interaction.channel} has been locked for non-staff.`)
+    .addFields({ name: 'Locked by', value: `${interaction.user} (${interaction.user.username})`, inline: true })
     .setTimestamp();
 
   await interaction.reply({ embeds: [embed] });
@@ -321,22 +321,22 @@ async function handleLock(interaction) {
 }
 
 async function handleUnlock(interaction) {
-  if (!checks.isStaff(interaction.member)) return interaction.reply({ content: 'Nur Staff kann den Channel entsperren.', flags: MessageFlags.Ephemeral });
+  if (!checks.isStaff(interaction.member)) return interaction.reply({ content: 'Staff only.', flags: MessageFlags.Ephemeral });
 
   try {
     await interaction.channel.permissionOverwrites.edit(interaction.guild.roles.everyone.id, {
       SendMessages: null,
       AddReactions: null,
-    }, { reason: `Unlocked by ${interaction.user.tag}` });
+    }, { reason: `Unlocked by ${interaction.user.username}` });
   } catch (e) {
-    return interaction.reply({ content: `Unlock fehlgeschlagen: ${e?.message || 'Unbekannt'}`, flags: MessageFlags.Ephemeral });
+    return interaction.reply({ content: `Unlock failed: ${e?.message || 'Unknown error'}`, flags: MessageFlags.Ephemeral });
   }
 
   const embed = new EmbedBuilder()
     .setColor(C.GREEN)
-    .setTitle('🔓 Channel entsperrt')
-    .setDescription(`${interaction.channel} ist wieder offen für alle.`)
-    .addFields({ name: 'Entsperrt von', value: `${interaction.user} (${interaction.user.tag})`, inline: true })
+    .setTitle('🔓 Channel Unlocked')
+    .setDescription(`${interaction.channel} is now open for everyone.`)
+    .addFields({ name: 'Unlocked by', value: `${interaction.user} (${interaction.user.username})`, inline: true })
     .setTimestamp();
 
   await interaction.reply({ embeds: [embed] });
@@ -346,24 +346,24 @@ async function handleUnlock(interaction) {
 // ──── /embed ────
 
 async function handleEmbed(interaction) {
-  if (!checks.isAdmin(interaction.member)) return interaction.reply({ content: 'Nur Admins können Embeds senden.', flags: MessageFlags.Ephemeral });
+  if (!checks.isAdmin(interaction.member)) return interaction.reply({ content: 'Admins only.', flags: MessageFlags.Ephemeral });
 
   const modal = new ModalBuilder()
     .setCustomId(EMBED_MODAL_ID)
-    .setTitle('Embed erstellen');
+    .setTitle('Create Embed');
 
   modal.addComponents(
     new ActionRowBuilder().addComponents(
-      new TextInputBuilder().setCustomId('title').setLabel('Titel (optional)').setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(256),
+      new TextInputBuilder().setCustomId('title').setLabel('Title (optional)').setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(256),
     ),
     new ActionRowBuilder().addComponents(
-      new TextInputBuilder().setCustomId('description').setLabel('Text / Inhalt').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(4000),
+      new TextInputBuilder().setCustomId('description').setLabel('Text / Content').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(4000),
     ),
     new ActionRowBuilder().addComponents(
-      new TextInputBuilder().setCustomId('color').setLabel('Farbe: Hex z.B. #5865F2 (optional)').setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(7).setPlaceholder('#5865F2'),
+      new TextInputBuilder().setCustomId('color').setLabel('Color: Hex e.g. #5865F2 (optional)').setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(7).setPlaceholder('#5865F2'),
     ),
     new ActionRowBuilder().addComponents(
-      new TextInputBuilder().setCustomId('footer').setLabel('Footer Text (optional)').setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(2048),
+      new TextInputBuilder().setCustomId('footer').setLabel('Footer text (optional)').setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(2048),
     ),
   );
 
@@ -371,7 +371,7 @@ async function handleEmbed(interaction) {
 }
 
 async function onEmbedModal(interaction) {
-  if (!checks.isAdmin(interaction.member)) return interaction.reply({ content: 'Nur Admins.', flags: MessageFlags.Ephemeral });
+  if (!checks.isAdmin(interaction.member)) return interaction.reply({ content: 'Admins only.', flags: MessageFlags.Ephemeral });
 
   const title       = interaction.fields.getTextInputValue('title').trim();
   const description = interaction.fields.getTextInputValue('description').trim();
@@ -391,9 +391,9 @@ async function onEmbedModal(interaction) {
 
   try {
     await interaction.channel.send({ embeds: [embed] });
-    return interaction.reply({ content: '✅ Embed gesendet.', flags: MessageFlags.Ephemeral });
+    return interaction.reply({ content: '✅ Embed sent.', flags: MessageFlags.Ephemeral });
   } catch (e) {
-    return interaction.reply({ content: `Fehler beim Senden: ${e?.message || 'Unbekannt'}`, flags: MessageFlags.Ephemeral });
+    return interaction.reply({ content: `Failed to send: ${e?.message || 'Unknown error'}`, flags: MessageFlags.Ephemeral });
   }
 }
 
@@ -408,7 +408,7 @@ function getStrikes(g, userId) {
 // ──── /strikes give ────
 
 async function handleStrikeGive(interaction) {
-  if (!checks.isAdmin(interaction.member)) return interaction.reply({ content: 'Nur Admins können Strikes vergeben.', flags: MessageFlags.Ephemeral });
+  if (!checks.isAdmin(interaction.member)) return interaction.reply({ content: 'Admins only.', flags: MessageFlags.Ephemeral });
 
   const target = interaction.options.getUser('user', true);
   const reason = interaction.options.getString('reason') || null;
@@ -423,17 +423,17 @@ async function handleStrikeGive(interaction) {
 
   const embed = new EmbedBuilder()
     .setColor(isMax ? C.RED : C.ORANGE)
-    .setTitle(isMax ? '🚨 Maximale Strikes erreicht!' : '⚠️ Strike vergeben')
+    .setTitle(isMax ? '🚨 Maximum Strikes Reached!' : '⚠️ Strike Issued')
     .setThumbnail(target.displayAvatarURL())
     .setDescription(
       isMax
-        ? `${target} hat **${data.count}/${MAX_STRIKES}** Strikes und sollte degradiert werden!`
-        : `${target} hat jetzt **${data.count}/${MAX_STRIKES}** Strike${data.count !== 1 ? 's' : ''}.`,
+        ? `${target} has **${data.count}/${MAX_STRIKES}** strikes and should be demoted!`
+        : `${target} now has **${data.count}/${MAX_STRIKES}** strike${data.count !== 1 ? 's' : ''}.`,
     )
     .addFields(
-      { name: 'User', value: `${target} (${target.tag})`, inline: true },
-      { name: 'Moderator', value: `${interaction.user} (${interaction.user.tag})`, inline: true },
-      { name: 'Grund', value: truncate(reason || '_Kein Grund angegeben_', DISCORD_LIMITS.EMBED_FIELD_VALUE), inline: false },
+      { name: 'User',      value: `${target} (${target.username})`,                     inline: true },
+      { name: 'Moderator', value: `${interaction.user} (${interaction.user.username})`, inline: true },
+      { name: 'Reason',    value: truncate(reason || '_No reason provided_', DISCORD_LIMITS.EMBED_FIELD_VALUE), inline: false },
     )
     .setFooter({ text: `Strike ${data.count}/${MAX_STRIKES} • User ID: ${target.id}` })
     .setTimestamp();
@@ -449,13 +449,13 @@ async function handleStrikeGive(interaction) {
 // ──── /strikes remove ────
 
 async function handleStrikeRemove(interaction) {
-  if (!checks.isAdmin(interaction.member)) return interaction.reply({ content: 'Nur Admins können Strikes entfernen.', flags: MessageFlags.Ephemeral });
+  if (!checks.isAdmin(interaction.member)) return interaction.reply({ content: 'Admins only.', flags: MessageFlags.Ephemeral });
 
   const target = interaction.options.getUser('user', true);
   const g = db.guild(interaction.guildId);
   const data = getStrikes(g, target.id);
 
-  if (data.count <= 0) return interaction.reply({ content: `${target.tag} hat keine Strikes.`, flags: MessageFlags.Ephemeral });
+  if (data.count <= 0) return interaction.reply({ content: `${target.username} has no strikes.`, flags: MessageFlags.Ephemeral });
 
   data.count -= 1;
   data.history.pop();
@@ -463,12 +463,12 @@ async function handleStrikeRemove(interaction) {
 
   const embed = new EmbedBuilder()
     .setColor(C.GREEN)
-    .setTitle('✅ Strike entfernt')
+    .setTitle('✅ Strike Removed')
     .setThumbnail(target.displayAvatarURL())
     .addFields(
-      { name: 'User', value: `${target} (${target.tag})`, inline: true },
-      { name: 'Moderator', value: `${interaction.user} (${interaction.user.tag})`, inline: true },
-      { name: 'Verbleibende Strikes', value: `**${data.count}/${MAX_STRIKES}**`, inline: true },
+      { name: 'User',             value: `${target} (${target.username})`,                     inline: true },
+      { name: 'Moderator',        value: `${interaction.user} (${interaction.user.username})`, inline: true },
+      { name: 'Remaining Strikes', value: `**${data.count}/${MAX_STRIKES}**`,                  inline: true },
     )
     .setFooter({ text: `User ID: ${target.id}` })
     .setTimestamp();
@@ -480,7 +480,7 @@ async function handleStrikeRemove(interaction) {
 // ──── /strikes check ────
 
 async function handleStrikeCheck(interaction) {
-  if (!checks.isStaff(interaction.member)) return interaction.reply({ content: 'Nur Staff kann Strikes einsehen.', flags: MessageFlags.Ephemeral });
+  if (!checks.isStaff(interaction.member)) return interaction.reply({ content: 'Staff only.', flags: MessageFlags.Ephemeral });
 
   const target = interaction.options.getUser('user', true);
   const g = db.guild(interaction.guildId);
@@ -488,17 +488,17 @@ async function handleStrikeCheck(interaction) {
 
   const embed = new EmbedBuilder()
     .setColor(data.count >= MAX_STRIKES ? C.RED : data.count > 0 ? C.ORANGE : C.GREEN)
-    .setTitle(`📋 Strikes: ${target.tag}`)
+    .setTitle(`📋 Strikes: ${target.username}`)
     .setThumbnail(target.displayAvatarURL())
     .addFields({ name: 'Strikes', value: `**${data.count}/${MAX_STRIKES}**`, inline: true });
 
   if (data.history.length) {
     const lines = data.history.map((e, i) =>
-      `**${i + 1}.** ${truncate(e.reason || '_Kein Grund_', 80)} — <@${e.by_id}> — <t:${Math.floor(e.at / 1000)}:R>`,
+      `**${i + 1}.** ${truncate(e.reason || '_No reason_', 80)} — <@${e.by_id}> — <t:${Math.floor(e.at / 1000)}:R>`,
     );
-    embed.addFields({ name: 'Verlauf', value: truncate(lines.join('\n'), DISCORD_LIMITS.EMBED_FIELD_VALUE), inline: false });
+    embed.addFields({ name: 'History', value: truncate(lines.join('\n'), DISCORD_LIMITS.EMBED_FIELD_VALUE), inline: false });
   } else {
-    embed.addFields({ name: 'Verlauf', value: '_Keine Strikes_', inline: false });
+    embed.addFields({ name: 'History', value: '_No strikes_', inline: false });
   }
 
   embed.setFooter({ text: `User ID: ${target.id}` }).setTimestamp();
@@ -508,24 +508,24 @@ async function handleStrikeCheck(interaction) {
 // ──── /strikes list ────
 
 async function handleStrikeList(interaction) {
-  if (!checks.isStaff(interaction.member)) return interaction.reply({ content: 'Nur Staff kann die Strike-Liste einsehen.', flags: MessageFlags.Ephemeral });
+  if (!checks.isStaff(interaction.member)) return interaction.reply({ content: 'Staff only.', flags: MessageFlags.Ephemeral });
 
   const g = db.guild(interaction.guildId);
   const entries = Object.entries(g.strikes || {})
     .filter(([, d]) => d.count > 0)
     .sort(([, a], [, b]) => b.count - a.count);
 
-  if (!entries.length) return interaction.reply({ content: 'Keine Strikes vergeben.', flags: MessageFlags.Ephemeral });
+  if (!entries.length) return interaction.reply({ content: 'No strikes have been issued.', flags: MessageFlags.Ephemeral });
 
   const lines = entries.map(([userId, d]) =>
-    `<@${userId}> — **${d.count}/${MAX_STRIKES}** Strike${d.count !== 1 ? 's' : ''}`,
+    `<@${userId}> — **${d.count}/${MAX_STRIKES}** strike${d.count !== 1 ? 's' : ''}`,
   );
 
   const embed = new EmbedBuilder()
     .setColor(C.ORANGE)
-    .setTitle('📋 Alle Strikes')
+    .setTitle('📋 All Strikes')
     .setDescription(truncate(lines.join('\n'), DISCORD_LIMITS.EMBED_DESCRIPTION))
-    .setFooter({ text: `${entries.length} User mit Strikes` })
+    .setFooter({ text: `${entries.length} user(s) with strikes` })
     .setTimestamp();
 
   await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
@@ -564,7 +564,7 @@ function register(client) {
       }
     } catch (err) {
       console.error('[moderation] error:', err);
-      const opts = { content: 'Etwas ist schiefgelaufen.', flags: MessageFlags.Ephemeral };
+      const opts = { content: 'Something went wrong.', flags: MessageFlags.Ephemeral };
       try {
         if (interaction.replied || interaction.deferred) await interaction.followUp(opts);
         else if (interaction.isRepliable?.()) await interaction.reply(opts);

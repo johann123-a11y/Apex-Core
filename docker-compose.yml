@@ -1,0 +1,14 @@
+services:
+  apex-core-prod:
+    build: .
+    container_name: apex-core-prod
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "3003:3003"
+    networks:
+      - vps-shared
+
+networks:
+  vps-shared:
+    external: true
