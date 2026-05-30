@@ -12,9 +12,10 @@ const warns    = require('./modules/warns');
 const welcome  = require('./modules/welcome');
 const giveaway = require('./modules/giveaway');
 const roles         = require('./modules/roles');
-const reactionroles = require('./modules/reactionroles');
+const reactionroles  = require('./modules/reactionroles');
+const applications   = require('./modules/applications');
 
-const modules = [staff, tickets, logging, moderation, warns, welcome, giveaway, roles, reactionroles];
+const modules = [staff, tickets, logging, moderation, warns, welcome, giveaway, roles, reactionroles, applications];
 
 function buildClient() {
   return new Client({
