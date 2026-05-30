@@ -33,6 +33,19 @@ const ID = {
   DENY_R:       'app:denyr:',      // + submissionId
   R_ACCEPT:     'app:r_accept:',   // + submissionId (modal)
   R_DENY:       'app:r_deny:',     // + submissionId (modal)
+  // ── /application info ──
+  INFO_SEL:     'app:info_sel',    // overview select menu
+  EDIT_DET:     'app:edet:',       // edit details button + appId
+  EDIT_DET_M:   'app:edetm:',      // edit details modal + appId
+  IAYN:         'app:iayn:',       // info-context add yes/no Q button + appId
+  IATXT:        'app:iatxt:',      // info-context add text Q button + appId
+  IAYN_M:       'app:iaynm:',      // info-context yes/no Q modal + appId
+  IATXT_M:      'app:iatxtm:',     // info-context text Q modal + appId
+  RMQ_BTN:      'app:rmqbtn:',     // show remove-question select + appId
+  RMQ_SEL:      'app:rmqsel:',     // remove-question select menu + appId
+  DEL_BTN:      'app:delbtn:',     // delete app button + appId
+  DEL_CONF:     'app:delcnf:',     // confirm delete button + appId
+  BACK:         'app:back:',       // back to detail view + appId
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -70,7 +83,8 @@ const command = new SlashCommandBuilder()
   .addSubcommand((s) =>
     s.setName('denied').setDescription('Set channel for denied applications')
       .addChannelOption((o) => o.setName('channel').setDescription('Channel').setRequired(true)),
-  );
+  )
+  .addSubcommand((s) => s.setName('info').setDescription('View and manage all applications'));
 
 // ─── Setup embed helpers ──────────────────────────────────────────────────────
 
@@ -638,6 +652,286 @@ async function processReview(interaction, decision, reason) {
   return interaction.update({ embeds: [updatedEmbed], components: [] });
 }
 
+// ─── /application info — overview ────────────────────────────────────────────
+
+async function handleInfo(interaction) {
+  if (!checks.isAdmin(interaction.member))
+    return interaction.reply({ content: 'Admins only.', flags: MessageFlags.Ephemeral });
+
+  const g       = adb.guild(interaction.guildId);
+  const guildDb = db.guild(interaction.guildId);
+  const apps    = Object.values(g.applications);
+  const d       = g.panelDescription;
+
+  const chLines = [
+    `**Pending:**  ${guildDb.application_pending_channel_id  ? `<#${guildDb.application_pending_channel_id}>`  : '_Not set_'}`,
+    `**Accepted:** ${guildDb.application_accepted_channel_id ? `<#${guildDb.application_accepted_channel_id}>` : '_Not set_'}`,
+    `**Denied:**   ${guildDb.application_denied_channel_id   ? `<#${guildDb.application_denied_channel_id}>`   : '_Not set_'}`,
+  ];
+
+  const descVal = (d.title || d.subtitle || d.description)
+    ? [
+        d.title       ? `**Title:** ${truncate(d.title, 80)}`       : null,
+        d.subtitle    ? `**Subtitle:** ${truncate(d.subtitle, 80)}` : null,
+        d.description ? `**Body:** ${truncate(d.description, 150)}` : null,
+        d.footer      ? `**Footer:** ${truncate(d.footer, 80)}`     : null,
+      ].filter(Boolean).join('\n')
+    : '_Not set — use `/application description`_';
+
+  const embed = new EmbedBuilder()
+    .setColor(0x5865F2)
+    .setTitle('📋 Application System — Overview')
+    .addFields(
+      { name: '📥 Channels',          value: chLines.join('\n'), inline: false },
+      { name: '📝 Panel Description', value: descVal,           inline: false },
+    )
+    .setTimestamp();
+
+  if (!apps.length) {
+    embed.addFields({ name: '📋 Applications', value: '_None yet — use `/application setup`_', inline: false });
+    return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+  }
+
+  const appLines = apps.map((a) =>
+    `${a.draft ? '⚠️' : '✅'} **${a.name}** (\`${a.id}\`) — for: ${a.applyingFor} · ${a.questions.length} question${a.questions.length !== 1 ? 's' : ''}`,
+  );
+  embed.addFields({ name: `📋 Applications (${apps.length})`, value: truncate(appLines.join('\n'), DISCORD_LIMITS.EMBED_FIELD_VALUE), inline: false });
+
+  const options = apps.slice(0, 25).map((a) =>
+    new StringSelectMenuOptionBuilder()
+      .setLabel(truncate((a.draft ? '⚠️ ' : '') + a.name, 90))
+      .setValue(a.id)
+      .setDescription(truncate(`${a.applyingFor} · ${a.questions.length} question${a.questions.length !== 1 ? 's' : ''}`, 90)),
+  );
+
+  return interaction.reply({
+    embeds: [embed],
+    components: [new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId(ID.INFO_SEL)
+        .setPlaceholder('Select an application to manage...')
+        .setMinValues(1).setMaxValues(1)
+        .addOptions(options),
+    )],
+    flags: MessageFlags.Ephemeral,
+  });
+}
+
+// ─── App detail view (shared helper) ─────────────────────────────────────────
+
+function buildAppDetailEmbed(app) {
+  const qLines = app.questions.length
+    ? app.questions.map((q, i) => `**${i + 1}.** [${q.type === 'yes_no' ? 'Yes/No' : 'Text'}] ${q.text}`)
+    : ['_No questions yet._'];
+  return new EmbedBuilder()
+    .setColor(app.draft ? 0xFAA61A : 0x57F287)
+    .setTitle(`📋 ${app.name}`)
+    .addFields(
+      { name: 'Applying For',   value: app.applyingFor,                                         inline: true  },
+      { name: 'Status',         value: app.draft ? '⚠️ Draft' : '✅ Ready',                      inline: true  },
+      { name: 'ID',             value: `\`${app.id}\``,                                         inline: true  },
+      { name: 'Role on Accept', value: app.roleOnAccept ? `<@&${app.roleOnAccept}>` : '_None_', inline: true  },
+      { name: `Questions (${app.questions.length})`, value: truncate(qLines.join('\n'), DISCORD_LIMITS.EMBED_FIELD_VALUE), inline: false },
+    )
+    .setFooter({ text: 'Use the buttons below to edit this application' })
+    .setTimestamp();
+}
+
+function buildAppDetailComponents(appId, hasQuestions) {
+  return [
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(ID.EDIT_DET + appId).setLabel('✏️ Edit Details').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId(ID.IAYN     + appId).setLabel('➕ Yes/No Q').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(ID.IATXT    + appId).setLabel('➕ Text Q').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(ID.RMQ_BTN  + appId).setLabel('➖ Remove Q').setStyle(ButtonStyle.Secondary).setDisabled(!hasQuestions),
+      new ButtonBuilder().setCustomId(ID.DEL_BTN  + appId).setLabel('🗑️ Delete').setStyle(ButtonStyle.Danger),
+    ),
+  ];
+}
+
+async function showAppDetail(interaction, appId) {
+  const g   = adb.guild(interaction.guildId);
+  const app = g.applications[appId];
+  if (!app) return interaction.update({ content: 'Application not found.', embeds: [], components: [] });
+  return interaction.update({ content: '', embeds: [buildAppDetailEmbed(app)], components: buildAppDetailComponents(appId, app.questions.length > 0) });
+}
+
+async function onInfoAppSelect(interaction) {
+  if (!checks.isAdmin(interaction.member))
+    return interaction.reply({ content: 'Admins only.', flags: MessageFlags.Ephemeral });
+  return showAppDetail(interaction, interaction.values[0]);
+}
+
+// ─── Edit details ─────────────────────────────────────────────────────────────
+
+async function onEditDetailsBtn(interaction) {
+  if (!checks.isAdmin(interaction.member))
+    return interaction.reply({ content: 'Admins only.', flags: MessageFlags.Ephemeral });
+
+  const appId = interaction.customId.slice(ID.EDIT_DET.length);
+  const app   = adb.guild(interaction.guildId).applications[appId];
+  if (!app) return interaction.reply({ content: 'Application not found.', flags: MessageFlags.Ephemeral });
+
+  const modal = new ModalBuilder().setCustomId(ID.EDIT_DET_M + appId).setTitle('Edit Application');
+  modal.addComponents(
+    new ActionRowBuilder().addComponents(
+      new TextInputBuilder().setCustomId('name').setLabel('Application Name').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(80).setValue(app.name),
+    ),
+    new ActionRowBuilder().addComponents(
+      new TextInputBuilder().setCustomId('for').setLabel('Applying For').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(80).setValue(app.applyingFor),
+    ),
+    new ActionRowBuilder().addComponents(
+      new TextInputBuilder().setCustomId('role_id').setLabel('Role ID on accept (optional)').setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(30).setValue(app.roleOnAccept || ''),
+    ),
+  );
+  return interaction.showModal(modal);
+}
+
+async function onEditDetailsModal(interaction) {
+  if (!checks.isAdmin(interaction.member))
+    return interaction.reply({ content: 'Admins only.', flags: MessageFlags.Ephemeral });
+
+  const appId = interaction.customId.slice(ID.EDIT_DET_M.length);
+  const g     = adb.guild(interaction.guildId);
+  const app   = g.applications[appId];
+  if (!app) return interaction.reply({ content: 'Application not found.', flags: MessageFlags.Ephemeral });
+
+  app.name         = interaction.fields.getTextInputValue('name').trim();
+  app.applyingFor  = interaction.fields.getTextInputValue('for').trim();
+  app.roleOnAccept = interaction.fields.getTextInputValue('role_id')?.trim() || null;
+  await adb.save();
+
+  return interaction.update({ content: '', embeds: [buildAppDetailEmbed(app)], components: buildAppDetailComponents(appId, app.questions.length > 0) });
+}
+
+// ─── Info-context add question ────────────────────────────────────────────────
+
+async function onInfoAddQuestionBtn(interaction, type) {
+  if (!checks.isAdmin(interaction.member))
+    return interaction.reply({ content: 'Admins only.', flags: MessageFlags.Ephemeral });
+
+  const appId   = interaction.customId.slice((type === 'yes_no' ? ID.IAYN : ID.IATXT).length);
+  const modalId = (type === 'yes_no' ? ID.IAYN_M : ID.IATXT_M) + appId;
+
+  const modal = new ModalBuilder().setCustomId(modalId).setTitle('Add Question');
+  modal.addComponents(new ActionRowBuilder().addComponents(
+    new TextInputBuilder()
+      .setCustomId('question')
+      .setLabel(type === 'yes_no' ? 'Yes/No question text' : 'Text question text')
+      .setStyle(TextInputStyle.Paragraph)
+      .setRequired(true).setMaxLength(300),
+  ));
+  return interaction.showModal(modal);
+}
+
+async function onInfoQuestionModal(interaction, type) {
+  if (!checks.isAdmin(interaction.member))
+    return interaction.reply({ content: 'Admins only.', flags: MessageFlags.Ephemeral });
+
+  const prefix = type === 'yes_no' ? ID.IAYN_M : ID.IATXT_M;
+  const appId  = interaction.customId.slice(prefix.length);
+  const text   = interaction.fields.getTextInputValue('question').trim();
+
+  const g   = adb.guild(interaction.guildId);
+  const app = g.applications[appId];
+  if (!app) return interaction.reply({ content: 'Application not found.', flags: MessageFlags.Ephemeral });
+
+  app.questions.push({ text, type });
+  await adb.save();
+
+  return interaction.update({ content: '', embeds: [buildAppDetailEmbed(app)], components: buildAppDetailComponents(appId, true) });
+}
+
+// ─── Remove question ──────────────────────────────────────────────────────────
+
+async function onRemoveQBtn(interaction) {
+  if (!checks.isAdmin(interaction.member))
+    return interaction.reply({ content: 'Admins only.', flags: MessageFlags.Ephemeral });
+
+  const appId = interaction.customId.slice(ID.RMQ_BTN.length);
+  const app   = adb.guild(interaction.guildId).applications[appId];
+  if (!app?.questions.length) return interaction.reply({ content: 'No questions to remove.', flags: MessageFlags.Ephemeral });
+
+  const options = app.questions.map((q, i) =>
+    new StringSelectMenuOptionBuilder()
+      .setLabel(truncate(`${i + 1}. ${q.text}`, 90))
+      .setValue(String(i))
+      .setDescription(q.type === 'yes_no' ? 'Yes/No' : 'Text'),
+  );
+
+  return interaction.update({
+    content: '**Select a question to remove:**',
+    embeds: [],
+    components: [
+      new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+          .setCustomId(ID.RMQ_SEL + appId)
+          .setPlaceholder('Select question to remove...')
+          .setMinValues(1).setMaxValues(1)
+          .addOptions(options),
+      ),
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(ID.BACK + appId).setLabel('← Cancel').setStyle(ButtonStyle.Secondary),
+      ),
+    ],
+  });
+}
+
+async function onRemoveQSelect(interaction) {
+  if (!checks.isAdmin(interaction.member))
+    return interaction.reply({ content: 'Admins only.', flags: MessageFlags.Ephemeral });
+
+  const appId = interaction.customId.slice(ID.RMQ_SEL.length);
+  const idx   = parseInt(interaction.values[0], 10);
+  const g     = adb.guild(interaction.guildId);
+  const app   = g.applications[appId];
+  if (!app) return interaction.update({ content: 'Application not found.', embeds: [], components: [] });
+
+  app.questions.splice(idx, 1);
+  await adb.save();
+
+  return interaction.update({ content: '', embeds: [buildAppDetailEmbed(app)], components: buildAppDetailComponents(appId, app.questions.length > 0) });
+}
+
+// ─── Delete application ───────────────────────────────────────────────────────
+
+async function onDeleteBtn(interaction) {
+  if (!checks.isAdmin(interaction.member))
+    return interaction.reply({ content: 'Admins only.', flags: MessageFlags.Ephemeral });
+
+  const appId = interaction.customId.slice(ID.DEL_BTN.length);
+  const app   = adb.guild(interaction.guildId).applications[appId];
+  if (!app) return interaction.update({ content: 'Application not found.', embeds: [], components: [] });
+
+  return interaction.update({
+    content: `⚠️ Are you sure you want to delete **${app.name}**? This cannot be undone.`,
+    embeds: [],
+    components: [new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(ID.DEL_CONF + appId).setLabel('🗑️ Yes, delete').setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId(ID.BACK + appId).setLabel('← Cancel').setStyle(ButtonStyle.Secondary),
+    )],
+  });
+}
+
+async function onDeleteConfirmBtn(interaction) {
+  if (!checks.isAdmin(interaction.member))
+    return interaction.reply({ content: 'Admins only.', flags: MessageFlags.Ephemeral });
+
+  const appId = interaction.customId.slice(ID.DEL_CONF.length);
+  const g     = adb.guild(interaction.guildId);
+  const name  = g.applications[appId]?.name ?? appId;
+  delete g.applications[appId];
+  await adb.save();
+
+  return interaction.update({ content: `🗑️ **${name}** has been deleted.`, embeds: [], components: [] });
+}
+
+async function onBackBtn(interaction) {
+  if (!checks.isAdmin(interaction.member))
+    return interaction.reply({ content: 'Admins only.', flags: MessageFlags.Ephemeral });
+  return showAppDetail(interaction, interaction.customId.slice(ID.BACK.length));
+}
+
 // ─── Register ─────────────────────────────────────────────────────────────────
 
 function register(client) {
@@ -653,6 +947,7 @@ function register(client) {
         if (sub === 'pending')     return await handleChannel(interaction, 'pending');
         if (sub === 'accepted')    return await handleChannel(interaction, 'accepted');
         if (sub === 'denied')      return await handleChannel(interaction, 'denied');
+        if (sub === 'info')        return await handleInfo(interaction);
       }
 
       if (interaction.isModalSubmit()) {
@@ -663,6 +958,9 @@ function register(client) {
         if (id.startsWith(ID.TXT_MODAL))      return await onQuestionModal(interaction, 'text');
         if (id.startsWith(ID.R_ACCEPT))       return await onReasonModal(interaction, 'accepted');
         if (id.startsWith(ID.R_DENY))         return await onReasonModal(interaction, 'denied');
+        if (id.startsWith(ID.EDIT_DET_M))     return await onEditDetailsModal(interaction);
+        if (id.startsWith(ID.IAYN_M))         return await onInfoQuestionModal(interaction, 'yes_no');
+        if (id.startsWith(ID.IATXT_M))        return await onInfoQuestionModal(interaction, 'text');
       }
 
       if (interaction.isButton()) {
@@ -674,12 +972,21 @@ function register(client) {
         if (id.startsWith(ID.DENY_R))         return await onDenyReasonBtn(interaction);
         if (id.startsWith(ID.ACCEPT))         return await onAcceptBtn(interaction);
         if (id.startsWith(ID.DENY))           return await onDenyBtn(interaction);
+        if (id.startsWith(ID.EDIT_DET))       return await onEditDetailsBtn(interaction);
+        if (id.startsWith(ID.IAYN))           return await onInfoAddQuestionBtn(interaction, 'yes_no');
+        if (id.startsWith(ID.IATXT))          return await onInfoAddQuestionBtn(interaction, 'text');
+        if (id.startsWith(ID.RMQ_BTN))        return await onRemoveQBtn(interaction);
+        if (id.startsWith(ID.DEL_CONF))       return await onDeleteConfirmBtn(interaction);
+        if (id.startsWith(ID.DEL_BTN))        return await onDeleteBtn(interaction);
+        if (id.startsWith(ID.BACK))           return await onBackBtn(interaction);
       }
 
       if (interaction.isStringSelectMenu()) {
         const id = interaction.customId;
         if (id === ID.GROUP_SELECT)           return await onGroupSelect(interaction);
         if (id === ID.APPLY_SELECT)           return await onApplySelect(interaction);
+        if (id === ID.INFO_SEL)               return await onInfoAppSelect(interaction);
+        if (id.startsWith(ID.RMQ_SEL))        return await onRemoveQSelect(interaction);
       }
     } catch (err) {
       console.error('[applications] error:', err);
