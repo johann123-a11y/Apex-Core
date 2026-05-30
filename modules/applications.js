@@ -49,6 +49,7 @@ const ID = {
   BACK:         'app:back:',       // back to detail view + appId
   OPEN_TKT:     'app:opentkt:',    // open ticket with applicant + submissionId
   OPEN_ATKT:    'app:openatkt:',   // open admin ticket with applicant + submissionId
+  APP_BL:       'app:appbl:',      // application blacklist button + submissionId
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -521,6 +522,7 @@ async function runApplicationFlow(client, guild, user, app, guildId, dmChannel) 
   const ticketButtons = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId(ID.OPEN_TKT  + submissionId).setLabel('🎫 Open Ticket').setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId(ID.OPEN_ATKT + submissionId).setLabel('🔒 Open Admin Ticket').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(ID.APP_BL    + submissionId).setLabel('🚫 Application Blacklist').setStyle(ButtonStyle.Danger),
   );
 
   const sent = await pendingCh.send({ embeds: [pendingEmbed], components: [buttons, ticketButtons] });
@@ -946,6 +948,27 @@ async function onBackBtn(interaction) {
 
 // ─── Open ticket from application ────────────────────────────────────────────
 
+async function onAppBlacklistBtn(interaction) {
+  if (!checks.isAdmin(interaction.member))
+    return interaction.reply({ content: 'Admins only.', flags: MessageFlags.Ephemeral });
+
+  const sid = parseInt(interaction.customId.slice(ID.APP_BL.length), 10);
+  const g   = adb.guild(interaction.guildId);
+  const sub = g.submissions.find((s) => s.submissionId === sid);
+  if (!sub)
+    return interaction.reply({ content: 'Submission not found.', flags: MessageFlags.Ephemeral });
+
+  const guildDb = db.guild(interaction.guildId);
+  if (!Array.isArray(guildDb.app_blacklist)) guildDb.app_blacklist = [];
+  if (guildDb.app_blacklist.includes(sub.userId))
+    return interaction.reply({ content: `<@${sub.userId}> is already blacklisted from applications.`, flags: MessageFlags.Ephemeral });
+
+  guildDb.app_blacklist.push(sub.userId);
+  await db.save();
+
+  return interaction.reply({ content: `🚫 <@${sub.userId}> is now blacklisted from opening applications.`, flags: MessageFlags.Ephemeral });
+}
+
 async function onOpenTicketBtn(interaction, adminOnly) {
   if (!checks.isStaff(interaction.member))
     return interaction.reply({ content: 'Staff only.', flags: MessageFlags.Ephemeral });
@@ -1023,6 +1046,7 @@ function register(client) {
         if (id.startsWith(ID.BACK))           return await onBackBtn(interaction);
         if (id.startsWith(ID.OPEN_ATKT))      return await onOpenTicketBtn(interaction, true);
         if (id.startsWith(ID.OPEN_TKT))       return await onOpenTicketBtn(interaction, false);
+        if (id.startsWith(ID.APP_BL))         return await onAppBlacklistBtn(interaction);
       }
 
       if (interaction.isStringSelectMenu()) {
