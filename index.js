@@ -11,8 +11,9 @@ const moderation = require('./modules/moderation');
 const warns    = require('./modules/warns');
 const welcome  = require('./modules/welcome');
 const giveaway = require('./modules/giveaway');
+const roles    = require('./modules/roles');
 
-const modules = [staff, tickets, logging, moderation, warns, welcome, giveaway];
+const modules = [staff, tickets, logging, moderation, warns, welcome, giveaway, roles];
 
 function buildClient() {
   return new Client({
