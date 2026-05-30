@@ -27,6 +27,8 @@ function buildClient() {
       GatewayIntentBits.GuildVoiceStates,
       GatewayIntentBits.GuildModeration,
       GatewayIntentBits.GuildMessageReactions,
+      GatewayIntentBits.DirectMessages,
+      GatewayIntentBits.DirectMessageReactions,
     ],
     partials: [Partials.Channel, Partials.Message, Partials.GuildMember, Partials.User, Partials.Reaction],
   });
