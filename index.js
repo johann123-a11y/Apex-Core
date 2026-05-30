@@ -14,8 +14,9 @@ const giveaway = require('./modules/giveaway');
 const roles         = require('./modules/roles');
 const reactionroles  = require('./modules/reactionroles');
 const applications   = require('./modules/applications');
+const blacklist      = require('./modules/blacklist');
 
-const modules = [staff, tickets, logging, moderation, warns, welcome, giveaway, roles, reactionroles, applications];
+const modules = [staff, tickets, logging, moderation, warns, welcome, giveaway, roles, reactionroles, applications, blacklist];
 
 function buildClient() {
   return new Client({

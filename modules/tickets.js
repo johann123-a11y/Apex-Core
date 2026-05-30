@@ -634,7 +634,8 @@ async function onPanelModal(interaction) {
   const panelId = interaction.customId.slice(prefix.length);
 
   const g = db.guild(interaction.guildId);
-  if ((g.application_blacklist || []).includes(interaction.user.id)) {
+  const uid = interaction.user.id;
+  if (g.global_blacklist?.includes(uid) || g.ticket_blacklist?.includes(uid) || (g.application_blacklist || []).includes(uid)) {
     return ephemeral(interaction, 'You are blacklisted from opening tickets.');
   }
   const panel = g.panels[panelId];
@@ -663,7 +664,8 @@ async function onPanelClick(interaction) {
   const panelId = interaction.customId.slice(prefix.length);
 
   const g = db.guild(interaction.guildId);
-  if ((g.application_blacklist || []).includes(interaction.user.id)) {
+  const uid = interaction.user.id;
+  if (g.global_blacklist?.includes(uid) || g.ticket_blacklist?.includes(uid) || (g.application_blacklist || []).includes(uid)) {
     return ephemeral(interaction, 'You are blacklisted from opening tickets.');
   }
   const panel = g.panels[panelId];
@@ -1263,6 +1265,20 @@ async function closeTicket(interaction, ticket, reason) {
       }
     }
 
+    // DM the ticket opener (unless suppressed for app-linked tickets)
+    if (!ticket.no_close_dm) {
+      try {
+        const opener = await client.users.fetch(ticket.user_id).catch(() => null);
+        if (opener) {
+          await opener.send(
+            `🔒 Your ticket **${channelName}** in **${guild.name}** has been closed.\n` +
+            `**Closed by:** ${closedBy.username}\n` +
+            `**Reason:** ${reason || 'No reason provided'}`,
+          ).catch(() => {});
+        }
+      } catch { /* ignore */ }
+    }
+
     try {
       await channel.delete(`Ticket closed by ${closedBy.username}`);
     } catch (e) {
@@ -1353,7 +1369,100 @@ function register(client) {
   });
 }
 
+// ───── createLinkedTicket (called from applications module) ─────
+
+async function createLinkedTicket(client, guild, targetUser, staffMember, adminOnly, guildId) {
+  const g  = db.guild(guildId);
+  const me = guild.members.me;
+
+  const ticketId = db.nextGlobalTicketId(guildId);
+  await db.save();
+
+  const name = slugChannelName('app-ticket', ticketId);
+
+  const botPerms = [
+    PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages,
+    PermissionFlagsBits.ManageChannels, PermissionFlagsBits.ManageMessages,
+    PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.EmbedLinks,
+    PermissionFlagsBits.AttachFiles,
+  ];
+  const userPerms = [
+    PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages,
+    PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.EmbedLinks,
+    PermissionFlagsBits.AttachFiles,
+  ];
+
+  const overwrites = [
+    { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+    { id: targetUser.id, allow: userPerms },
+  ];
+  if (me) overwrites.push({ id: me.id, allow: botPerms });
+
+  if (adminOnly) {
+    // Only roles with Administrator permission + the user
+    for (const role of guild.roles.cache.values()) {
+      if (role.id === guild.roles.everyone.id) continue;
+      if (role.permissions.has(PermissionFlagsBits.Administrator)) {
+        overwrites.push({ id: role.id, allow: userPerms });
+      }
+    }
+  } else {
+    if (g.staff_role_id) overwrites.push({ id: g.staff_role_id, allow: userPerms });
+  }
+
+  let channel;
+  try {
+    const firstPanel = Object.values(g.panels)[0];
+    channel = await guild.channels.create({
+      name,
+      type: 0, // GuildText
+      parent: firstPanel?.category_id || undefined,
+      permissionOverwrites: overwrites,
+      topic: truncate(`${adminOnly ? 'Admin ticket' : 'Ticket'} for ${targetUser.tag} · opened by ${staffMember.user.tag}`, 1024),
+    });
+  } catch (e) {
+    console.error('[tickets] createLinkedTicket channel failed:', e?.message);
+    return null;
+  }
+
+  g.tickets[channel.id] = {
+    ticket_id: ticketId,
+    channel_id: channel.id,
+    user_id: targetUser.id,
+    panel_id: adminOnly ? 'admin-linked' : 'staff-linked',
+    panel_number: ticketId,
+    answers: {},
+    close_requested_by: null,
+    close_requested_by_user_id: null,
+    created_at: Date.now(),
+    no_close_dm: true,
+  };
+  await db.save();
+
+  const closeRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(IDS.TICKET_CLOSE)
+      .setLabel('🔒 Close Ticket')
+      .setStyle(ButtonStyle.Danger),
+  );
+
+  await channel.send({
+    content: `<@${targetUser.id}> <@${staffMember.user.id}>`,
+    embeds: [new EmbedBuilder()
+      .setColor(adminOnly ? 0xED4245 : 0x5865F2)
+      .setTitle(adminOnly ? '🔒 Admin Ticket' : '🎫 Ticket')
+      .setDescription(`Opened by <@${staffMember.user.id}> for <@${targetUser.id}>.`)
+      .setTimestamp(),
+    ],
+    components: [closeRow],
+    allowedMentions: { users: [targetUser.id, staffMember.user.id] },
+  });
+
+  return channel;
+}
+
 module.exports = {
   commands: [ticketCommand],
   register,
+  createLinkedTicket,
 };

@@ -8,9 +8,10 @@ const {
   ComponentType,
 } = require('discord.js');
 
-const adb    = require('../lib/app-db');
-const db     = require('../lib/db');
-const checks = require('../lib/checks');
+const adb     = require('../lib/app-db');
+const db      = require('../lib/db');
+const checks  = require('../lib/checks');
+const tickets = require('./tickets');
 const { truncate, DISCORD_LIMITS } = require('../config');
 
 const COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
@@ -46,6 +47,8 @@ const ID = {
   DEL_BTN:      'app:delbtn:',     // delete app button + appId
   DEL_CONF:     'app:delcnf:',     // confirm delete button + appId
   BACK:         'app:back:',       // back to detail view + appId
+  OPEN_TKT:     'app:opentkt:',    // open ticket with applicant + submissionId
+  OPEN_ATKT:    'app:openatkt:',   // open admin ticket with applicant + submissionId
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -380,6 +383,11 @@ async function onApplySelect(interaction) {
 
   const userId = interaction.user.id;
 
+  // Blacklist check
+  const guildDb = db.guild(interaction.guildId);
+  if (guildDb.global_blacklist?.includes(userId) || guildDb.app_blacklist?.includes(userId) || guildDb.application_blacklist?.includes(userId))
+    return interaction.reply({ content: 'You are blacklisted from opening applications.', flags: MessageFlags.Ephemeral });
+
   // Cooldown check
   const cooldown = g.cooldowns.find((c) => c.userId === userId && c.applicationId === appId);
   if (cooldown && (Date.now() - cooldown.lastApplied) < COOLDOWN_MS) {
@@ -505,13 +513,17 @@ async function runApplicationFlow(client, guild, user, app, guildId, dmChannel) 
     .setTimestamp();
 
   const buttons = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(ID.ACCEPT   + submissionId).setLabel('✅ Accept').setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId(ID.DENY     + submissionId).setLabel('❌ Deny').setStyle(ButtonStyle.Danger),
-    new ButtonBuilder().setCustomId(ID.ACCEPT_R + submissionId).setLabel('✅ Accept with reason').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(ID.DENY_R   + submissionId).setLabel('❌ Deny with reason').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(ID.ACCEPT    + submissionId).setLabel('✅ Accept').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId(ID.DENY      + submissionId).setLabel('❌ Deny').setStyle(ButtonStyle.Danger),
+    new ButtonBuilder().setCustomId(ID.ACCEPT_R  + submissionId).setLabel('✅ Accept with reason').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(ID.DENY_R    + submissionId).setLabel('❌ Deny with reason').setStyle(ButtonStyle.Secondary),
+  );
+  const ticketButtons = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(ID.OPEN_TKT  + submissionId).setLabel('🎫 Open Ticket').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId(ID.OPEN_ATKT + submissionId).setLabel('🔒 Open Admin Ticket').setStyle(ButtonStyle.Secondary),
   );
 
-  const sent = await pendingCh.send({ embeds: [pendingEmbed], components: [buttons] });
+  const sent = await pendingCh.send({ embeds: [pendingEmbed], components: [buttons, ticketButtons] });
 
   const sub = g.submissions.find((s) => s.submissionId === submissionId);
   if (sub) { sub.pendingMessageId = sent.id; sub.pendingChannelId = pendingCh.id; }
@@ -932,6 +944,36 @@ async function onBackBtn(interaction) {
   return showAppDetail(interaction, interaction.customId.slice(ID.BACK.length));
 }
 
+// ─── Open ticket from application ────────────────────────────────────────────
+
+async function onOpenTicketBtn(interaction, adminOnly) {
+  if (!checks.isStaff(interaction.member))
+    return interaction.reply({ content: 'Staff only.', flags: MessageFlags.Ephemeral });
+
+  const prefix = adminOnly ? ID.OPEN_ATKT : ID.OPEN_TKT;
+  const sid    = parseInt(interaction.customId.slice(prefix.length), 10);
+  const g      = adb.guild(interaction.guildId);
+  const sub    = g.submissions.find((s) => s.submissionId === sid);
+
+  if (!sub)
+    return interaction.reply({ content: 'Submission not found.', flags: MessageFlags.Ephemeral });
+
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+  let targetUser;
+  try { targetUser = await interaction.client.users.fetch(sub.userId); }
+  catch { return interaction.editReply({ content: 'Could not find that user.' }); }
+
+  const channel = await tickets.createLinkedTicket(
+    interaction.client, interaction.guild, targetUser, interaction.member, adminOnly, interaction.guildId,
+  );
+
+  if (!channel)
+    return interaction.editReply({ content: 'Failed to create ticket channel. Check bot permissions and category setup.' });
+
+  return interaction.editReply({ content: `✅ ${adminOnly ? 'Admin ticket' : 'Ticket'} created: ${channel}.` });
+}
+
 // ─── Register ─────────────────────────────────────────────────────────────────
 
 function register(client) {
@@ -979,6 +1021,8 @@ function register(client) {
         if (id.startsWith(ID.DEL_CONF))       return await onDeleteConfirmBtn(interaction);
         if (id.startsWith(ID.DEL_BTN))        return await onDeleteBtn(interaction);
         if (id.startsWith(ID.BACK))           return await onBackBtn(interaction);
+        if (id.startsWith(ID.OPEN_ATKT))      return await onOpenTicketBtn(interaction, true);
+        if (id.startsWith(ID.OPEN_TKT))       return await onOpenTicketBtn(interaction, false);
       }
 
       if (interaction.isStringSelectMenu()) {

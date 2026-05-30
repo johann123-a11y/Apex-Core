@@ -314,6 +314,10 @@ async function onJoinClick(interaction) {
     return interaction.reply({ content: 'This giveaway has already ended.', flags: MessageFlags.Ephemeral });
   }
 
+  const guildDb = require('../lib/db').guild(interaction.guildId);
+  if (guildDb.global_blacklist?.includes(interaction.user.id))
+    return interaction.reply({ content: 'You are not allowed to join giveaways.', flags: MessageFlags.Ephemeral });
+
   const leaveRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`${LEAVE_PREFIX}${messageId}`)
