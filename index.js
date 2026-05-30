@@ -64,6 +64,7 @@ async function main() {
   const client = buildClient();
   for (const m of modules) m.register(client);
 
+  client.setMaxListeners(30);
   client.once('clientReady', (c) => {
     console.log(`[apex-core] Logged in as ${c.user.tag} (id ${c.user.id})`);
   });
