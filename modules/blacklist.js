@@ -8,7 +8,7 @@ const { truncate, DISCORD_LIMITS } = require('../config');
 const command = new SlashCommandBuilder()
   .setName('blacklist')
   .setDescription('Manage blacklists')
-  .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
+  .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
   .setDMPermission(false)
   .addSubcommand((s) =>
     s.setName('add').setDescription('Globally blacklist a user from all bot features (read-only)')
@@ -43,7 +43,7 @@ function isBlacklisted(g, userId, type) {
 // ── Handlers ─────────────────────────────────────────────────────────────────
 
 async function handleAdd(interaction) {
-  if (!checks.isStaff(interaction.member))
+  if (!checks.isAdmin(interaction.member))
     return interaction.reply({ content: 'Staff only.', flags: MessageFlags.Ephemeral });
 
   const target = interaction.options.getUser('user', true);
@@ -63,7 +63,7 @@ async function handleAdd(interaction) {
 }
 
 async function handleTicketBlacklist(interaction) {
-  if (!checks.isStaff(interaction.member))
+  if (!checks.isAdmin(interaction.member))
     return interaction.reply({ content: 'Staff only.', flags: MessageFlags.Ephemeral });
 
   const target = interaction.options.getUser('user', true);
@@ -80,7 +80,7 @@ async function handleTicketBlacklist(interaction) {
 }
 
 async function handleApplicationBlacklist(interaction) {
-  if (!checks.isStaff(interaction.member))
+  if (!checks.isAdmin(interaction.member))
     return interaction.reply({ content: 'Staff only.', flags: MessageFlags.Ephemeral });
 
   const target = interaction.options.getUser('user', true);
@@ -97,7 +97,7 @@ async function handleApplicationBlacklist(interaction) {
 }
 
 async function handleRemove(interaction) {
-  if (!checks.isStaff(interaction.member))
+  if (!checks.isAdmin(interaction.member))
     return interaction.reply({ content: 'Staff only.', flags: MessageFlags.Ephemeral });
 
   const target = interaction.options.getUser('user', true);
@@ -126,7 +126,7 @@ async function handleRemove(interaction) {
 }
 
 async function handleList(interaction) {
-  if (!checks.isStaff(interaction.member))
+  if (!checks.isAdmin(interaction.member))
     return interaction.reply({ content: 'Staff only.', flags: MessageFlags.Ephemeral });
 
   const g = db.guild(interaction.guildId);
