@@ -62,9 +62,8 @@ async function main() {
   transcriptServer.start(TRANSCRIPT_PORT);
 
   const client = buildClient();
-  for (const m of modules) m.register(client);
-
   client.setMaxListeners(30);
+  for (const m of modules) m.register(client);
   client.once('clientReady', (c) => {
     console.log(`[apex-core] Logged in as ${c.user.tag} (id ${c.user.id})`);
   });
