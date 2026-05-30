@@ -11,9 +11,10 @@ const moderation = require('./modules/moderation');
 const warns    = require('./modules/warns');
 const welcome  = require('./modules/welcome');
 const giveaway = require('./modules/giveaway');
-const roles    = require('./modules/roles');
+const roles         = require('./modules/roles');
+const reactionroles = require('./modules/reactionroles');
 
-const modules = [staff, tickets, logging, moderation, warns, welcome, giveaway, roles];
+const modules = [staff, tickets, logging, moderation, warns, welcome, giveaway, roles, reactionroles];
 
 function buildClient() {
   return new Client({
@@ -24,8 +25,9 @@ function buildClient() {
       GatewayIntentBits.MessageContent,   // privileged — enable in Dev Portal
       GatewayIntentBits.GuildVoiceStates,
       GatewayIntentBits.GuildModeration,
+      GatewayIntentBits.GuildMessageReactions,
     ],
-    partials: [Partials.Channel, Partials.Message, Partials.GuildMember, Partials.User],
+    partials: [Partials.Channel, Partials.Message, Partials.GuildMember, Partials.User, Partials.Reaction],
   });
 }
 
