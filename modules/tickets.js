@@ -81,7 +81,7 @@ function ephemeral(interaction, content) {
 const ticketCommand = new SlashCommandBuilder()
   .setName('ticket')
   .setDescription('Apex Core ticket system')
-  .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels)
+  .setDefaultMemberPermissions(0n)
   .setDMPermission(false)
   .addSubcommand((s) => s.setName('description').setDescription('Set the ticket panel description (title, subtitle, body, footer)'))
   .addSubcommand((s) => s.setName('setup').setDescription('Create or update a ticket panel'))

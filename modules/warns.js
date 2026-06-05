@@ -35,7 +35,7 @@ function getWarnData(g, userId) {
 const warnCommand = new SlashCommandBuilder()
   .setName('warn')
   .setDescription('Warning system')
-  .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
+  .setDefaultMemberPermissions(0n)
   .setDMPermission(false)
   .addSubcommand((s) =>
     s.setName('give').setDescription('Give a user a warning')
