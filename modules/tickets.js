@@ -310,7 +310,7 @@ function buildTicketTopButtons() {
 // ───── Slash subcommand handlers ─────
 
 async function handleDescription(interaction) {
-  if (!checks.isStaff(interaction.member)) return ephemeral(interaction, 'Staff only.');
+  if (!checks.isAdmin(interaction.member)) return ephemeral(interaction, 'Admin only.');
   const g = db.guild(interaction.guildId);
   return interaction.showModal(buildDescriptionModal(g.description));
 }
@@ -321,7 +321,7 @@ async function handleSetup(interaction) {
 }
 
 async function handleGroup(interaction) {
-  if (!checks.isStaff(interaction.member)) return ephemeral(interaction, 'Staff only.');
+  if (!checks.isAdmin(interaction.member)) return ephemeral(interaction, 'Admin only.');
   const g = db.guild(interaction.guildId);
   const panels = Object.values(g.panels);
   if (!panels.length) return ephemeral(interaction, 'No panels configured yet. Use `/ticket setup` first.');
@@ -350,7 +350,7 @@ async function handleGroup(interaction) {
 async function handleRename(interaction) {
   const ticket = checks.getTicket(interaction.guildId, interaction.channel.id);
   if (!ticket) return ephemeral(interaction, 'This is not a ticket channel.');
-  if (!checks.isStaff(interaction.member)) return ephemeral(interaction, 'Staff only.');
+  if (!checks.isAdmin(interaction.member)) return ephemeral(interaction, 'Admin only.');
 
   const raw = interaction.options.getString('name', true);
   const sanitized = raw.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
@@ -421,7 +421,7 @@ async function handleMove(interaction) {
 }
 
 async function handleView(interaction) {
-  if (!checks.isStaff(interaction.member)) return ephemeral(interaction, 'Staff only.');
+  if (!checks.isAdmin(interaction.member)) return ephemeral(interaction, 'Admin only.');
   const role = interaction.options.getRole('role', true);
   const g = db.guild(interaction.guildId);
   if (!g.view_role_ids) g.view_role_ids = [];
@@ -437,7 +437,7 @@ async function handleView(interaction) {
 }
 
 async function handlePing(interaction) {
-  if (!checks.isStaff(interaction.member)) return ephemeral(interaction, 'Staff only.');
+  if (!checks.isAdmin(interaction.member)) return ephemeral(interaction, 'Admin only.');
   const role = interaction.options.getRole('role', true);
   const g = db.guild(interaction.guildId);
   if (!g.ping_role_ids) g.ping_role_ids = [];
@@ -453,7 +453,7 @@ async function handlePing(interaction) {
 }
 
 async function handlePanels(interaction) {
-  if (!checks.isStaff(interaction.member)) return ephemeral(interaction, 'Staff only.');
+  if (!checks.isAdmin(interaction.member)) return ephemeral(interaction, 'Admin only.');
   const g = db.guild(interaction.guildId);
   const list = Object.values(g.panels);
   if (!list.length) return ephemeral(interaction, 'No panels configured.');
@@ -464,7 +464,7 @@ async function handlePanels(interaction) {
 }
 
 async function handleInfo(interaction) {
-  if (!checks.isStaff(interaction.member)) return ephemeral(interaction, 'Staff only.');
+  if (!checks.isAdmin(interaction.member)) return ephemeral(interaction, 'Admin only.');
   const g = db.guild(interaction.guildId);
 
   const embed = new EmbedBuilder()
@@ -530,7 +530,7 @@ async function handleInfo(interaction) {
 }
 
 async function handleEdit(interaction) {
-  if (!checks.isStaff(interaction.member)) return ephemeral(interaction, 'Staff only.');
+  if (!checks.isAdmin(interaction.member)) return ephemeral(interaction, 'Admin only.');
   const id = interaction.options.getString('panel_id', true).trim().toLowerCase();
   const g = db.guild(interaction.guildId);
   if (!g.panels[id]) return ephemeral(interaction, `No panel \`${id}\` found. Use \`/ticket setup\` to create it first.`);
@@ -538,7 +538,7 @@ async function handleEdit(interaction) {
 }
 
 async function handleDelete(interaction) {
-  if (!checks.isStaff(interaction.member)) return ephemeral(interaction, 'Staff only.');
+  if (!checks.isAdmin(interaction.member)) return ephemeral(interaction, 'Admin only.');
   const id = interaction.options.getString('panel_id', true).trim().toLowerCase();
   const g = db.guild(interaction.guildId);
   if (!g.panels[id]) return ephemeral(interaction, `No panel \`${id}\` exists.`);
