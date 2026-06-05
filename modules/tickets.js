@@ -316,7 +316,7 @@ async function handleDescription(interaction) {
 }
 
 async function handleSetup(interaction) {
-  if (!checks.isStaff(interaction.member)) return ephemeral(interaction, 'Staff only.');
+  if (!checks.isAdmin(interaction.member)) return ephemeral(interaction, 'Admin only.');
   return interaction.showModal(buildSetupModal());
 }
 

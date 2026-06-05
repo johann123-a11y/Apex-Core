@@ -90,7 +90,7 @@ const embedCommand = new SlashCommandBuilder()
 const strikesCommand = new SlashCommandBuilder()
   .setName('strikes')
   .setDescription('Strike system')
-  .setDefaultMemberPermissions(0n)
+  .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
   .setDMPermission(false)
   .addSubcommand((s) =>
     s.setName('give').setDescription('Give a user a strike')
