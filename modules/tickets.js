@@ -350,7 +350,7 @@ async function handleGroup(interaction) {
 async function handleRename(interaction) {
   const ticket = checks.getTicket(interaction.guildId, interaction.channel.id);
   if (!ticket) return ephemeral(interaction, 'This is not a ticket channel.');
-  if (!checks.isAdmin(interaction.member)) return ephemeral(interaction, 'Admin only.');
+  if (!checks.isStaff(interaction.member)) return ephemeral(interaction, 'Staff only.');
 
   const raw = interaction.options.getString('name', true);
   const sanitized = raw.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
