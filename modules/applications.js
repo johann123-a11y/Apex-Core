@@ -524,18 +524,22 @@ async function runApplicationFlow(client, guild, user, app, guildId, dmChannel) 
   const member = await guild.members.fetch(user.id).catch(() => null);
   const joinedStr = member?.joinedAt ? `<t:${Math.floor(member.joinedAt.getTime() / 1000)}:R>`: '_Unknown_';
 
-  const answerLines = answers.map((a, i) => `**${i + 1}. ${a.question}**\n${a.answer}`).join('\n\n');
+  const answerFields = answers.slice(0, 21).map(a => ({
+    name: truncate(a.question, DISCORD_LIMITS.EMBED_FIELD_NAME),
+    value: truncate(a.answer || '—', DISCORD_LIMITS.EMBED_FIELD_VALUE),
+    inline: false,
+  }));
 
   const pendingEmbed = new EmbedBuilder()
     .setColor(0xFAA61A)
     .setTitle(`${app.name}`)
-    .setDescription(truncate(answerLines, DISCORD_LIMITS.EMBED_DESCRIPTION))
     .setThumbnail(user.displayAvatarURL())
     .addFields(
       { name: 'User',     value: `<@${user.id}>`,  inline: true },
       { name: 'Username', value: user.username,    inline: true },
       { name: 'Joined',   value: joinedStr,         inline: true },
       { name: 'User ID',  value: user.id,           inline: false },
+      ...answerFields,
     )
     .setFooter({ text: `Submission #${submissionId} • ${app.applyingFor}`})
     .setTimestamp();
@@ -669,15 +673,21 @@ async function processReview(interaction, decision, reason) {
     denied_channel_id:   guildDb.application_denied_channel_id   || null,
   }).catch(() => {});
 
+  const declinedAnswerFields = sub.answers.slice(0, 20).map(a => ({
+    name: truncate(a.question, DISCORD_LIMITS.EMBED_FIELD_NAME),
+    value: truncate(a.answer || '—', DISCORD_LIMITS.EMBED_FIELD_VALUE),
+    inline: false,
+  }));
+
   const declinedEmbed = new EmbedBuilder()
     .setColor(0xED4245)
     .setTitle(`Declined — ${app?.name ?? sub.applicationId}`)
-    .setDescription(truncate(sub.answers.map((a, i) => `**${i + 1}. ${a.question}**\n${a.answer}`).join('\n\n'), DISCORD_LIMITS.EMBED_DESCRIPTION))
     .addFields(
-      { name: 'User',        value: `<@${sub.userId}>`,           inline: true  },
-      { name: 'Username',    value: sub.username,                  inline: true  },
-      { name: 'Reviewed by', value: `<@${interaction.user.id}>`,  inline: true  },
-      { name: 'Reason',      value: reason || '_No reason provided_', inline: false },
+      { name: 'User',        value: `<@${sub.userId}>`,               inline: true  },
+      { name: 'Username',    value: sub.username,                      inline: true  },
+      { name: 'Reviewed by', value: `<@${interaction.user.id}>`,      inline: true  },
+      { name: 'Reason',      value: reason || '_No reason provided_',  inline: false },
+      ...declinedAnswerFields,
     )
     .setFooter({ text: `Submission #${submissionId}` })
     .setTimestamp();
