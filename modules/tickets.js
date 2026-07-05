@@ -38,7 +38,7 @@ const COLOR_STYLE = {
   gray: ButtonStyle.Secondary,
   grey: ButtonStyle.Secondary,
 };
-const COLOR_NORMAL = { blue: 'Blue', green: 'Green', red: 'Red', gray: 'Gray', grey: 'Gray' };
+const COLOR_NORMAL = { blue: 'Blue', green: 'Green', red: 'Red', gray: 'Gray', grey: 'Gray'};
 
 function normalizeColor(raw) {
   if (!raw) return null;
@@ -57,12 +57,12 @@ function slugChannelName(panelId, counter) {
 
 async function safeReply(interaction, opts) {
   try {
-    // Order matters: `replied` is set after editReply too, so check it first.
+    // Order matters: `replied`is set after editReply too, so check it first.
     if (interaction.replied) {
       return await interaction.followUp(opts);
     }
     if (interaction.deferred) {
-      // editReply doesn't accept `flags` — they were locked in at defer time.
+      // editReply doesn't accept `flags`— they were locked in at defer time.
       const { flags: _drop, ...rest } = opts;
       return await interaction.editReply(rest);
     }
@@ -302,8 +302,8 @@ function buildPanelButtonRows(panels) {
 
 function buildTicketTopButtons() {
   return new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(IDS.TICKET_REQUEST_CLOSE).setLabel(truncate('Request Close', DISCORD_LIMITS.BUTTON_LABEL)).setStyle(ButtonStyle.Secondary).setEmoji('📩'),
-    new ButtonBuilder().setCustomId(IDS.TICKET_CLOSE).setLabel(truncate('Close Ticket', DISCORD_LIMITS.BUTTON_LABEL)).setStyle(ButtonStyle.Danger).setEmoji('🔒'),
+    new ButtonBuilder().setCustomId(IDS.TICKET_REQUEST_CLOSE).setLabel(truncate('Request Close', DISCORD_LIMITS.BUTTON_LABEL)).setStyle(ButtonStyle.Secondary).setEmoji(''),
+    new ButtonBuilder().setCustomId(IDS.TICKET_CLOSE).setLabel(truncate('Close Ticket', DISCORD_LIMITS.BUTTON_LABEL)).setStyle(ButtonStyle.Danger).setEmoji(''),
   );
 }
 
@@ -324,7 +324,7 @@ async function handleGroup(interaction) {
   if (!checks.isAdmin(interaction.member)) return ephemeral(interaction, 'Admin only.');
   const g = db.guild(interaction.guildId);
   const panels = Object.values(g.panels);
-  if (!panels.length) return ephemeral(interaction, 'No panels configured yet. Use `/ticket setup` first.');
+  if (!panels.length) return ephemeral(interaction, 'No panels configured yet. Use `/ticket setup`first.');
 
   const trimmed = panels.slice(0, DISCORD_LIMITS.SELECT_OPTIONS_MAX);
   const options = trimmed.map((p) => ({
@@ -377,7 +377,7 @@ async function handleAdd(interaction) {
       ReadMessageHistory: true,
       EmbedLinks: true,
       AttachFiles: true,
-    }, { reason: `Added to ticket by ${interaction.user.tag}` });
+    }, { reason: `Added to ticket by ${interaction.user.tag}`});
     return interaction.reply({ content: `Added <@${user.id}> to this ticket.`, allowedMentions: { users: [user.id] } });
   } catch (e) {
     return ephemeral(interaction, `Failed to add: ${e?.message || 'unknown'}`);
@@ -413,7 +413,7 @@ async function handleMove(interaction) {
     return ephemeral(interaction, 'Category ID does not match a category in this server.');
   }
   try {
-    await interaction.channel.setParent(category.id, { lockPermissions: false, reason: `Moved by ${interaction.user.tag}` });
+    await interaction.channel.setParent(category.id, { lockPermissions: false, reason: `Moved by ${interaction.user.tag}`});
     return ephemeral(interaction, `Moved to category \`${category.name}\`.`);
   } catch (e) {
     return ephemeral(interaction, `Failed to move: ${e?.message || 'unknown'}`);
@@ -458,7 +458,7 @@ async function handlePanels(interaction) {
   const list = Object.values(g.panels);
   if (!list.length) return ephemeral(interaction, 'No panels configured.');
   const lines = list.map(
-    (p) => `• \`${p.panel_id}\` — ${p.button_text} [${p.button_color}] · cat:${p.category_id || 'none'} · questions:${(p.questions || []).length}`,
+    (p) => `• \`${p.panel_id}\`— ${p.button_text} [${p.button_color}] · cat:${p.category_id || 'none'} · questions:${(p.questions || []).length}`,
   );
   return ephemeral(interaction, truncate(lines.join('\n'), 1900));
 }
@@ -480,13 +480,13 @@ async function handleInfo(interaction) {
     if (desc.subtitle) parts.push(`**Subtitle:** ${truncate(desc.subtitle, 100)}`);
     if (desc.description) parts.push(`**Body:** ${truncate(desc.description, 200)}`);
     if (desc.footer) parts.push(`**Footer:** ${truncate(desc.footer, 100)}`);
-    embed.addFields({ name: '📝 Panel Description', value: truncate(parts.join('\n'), DISCORD_LIMITS.EMBED_FIELD_VALUE), inline: false });
+    embed.addFields({ name: 'Panel Description', value: truncate(parts.join('\n'), DISCORD_LIMITS.EMBED_FIELD_VALUE), inline: false });
   } else {
-    embed.addFields({ name: '📝 Panel Description', value: '_Not set — use `/ticket description`_', inline: false });
+    embed.addFields({ name: 'Panel Description', value: '_Not set — use `/ticket description`_', inline: false });
   }
 
   // Global roles
-  const staffRole = g.staff_role_id ? `<@&${g.staff_role_id}>` : '_None_';
+  const staffRole = g.staff_role_id ? `<@&${g.staff_role_id}>`: '_None_';
   const viewRoles = (g.view_role_ids || []).length
     ? truncate((g.view_role_ids).map((id) => `<@&${id}>`).join(', '), DISCORD_LIMITS.EMBED_FIELD_VALUE)
     : '_None_';
@@ -495,32 +495,32 @@ async function handleInfo(interaction) {
     : '_None_';
 
   embed.addFields(
-    { name: '🛡️ Staff Role', value: staffRole, inline: true },
-    { name: '👁️ View Roles', value: viewRoles, inline: true },
-    { name: '🔔 Ping Roles', value: pingRoles, inline: true },
+    { name: 'Staff Role', value: staffRole, inline: true },
+    { name: 'View Roles', value: viewRoles, inline: true },
+    { name: 'Ping Roles', value: pingRoles, inline: true },
   );
 
   // Panels
   const panels = Object.values(g.panels);
   if (!panels.length) {
-    embed.addFields({ name: '📋 Panels', value: '_No panels configured. Use `/ticket setup` to create one._', inline: false });
+    embed.addFields({ name: 'Panels', value: '_No panels configured. Use `/ticket setup`to create one._', inline: false });
   } else {
     // Separator field
-    embed.addFields({ name: `📋 Panels (${panels.length})`, value: '​', inline: false });
+    embed.addFields({ name: `Panels (${panels.length})`, value: '​', inline: false });
     const shown = panels.slice(0, 21); // keep well under the 25-field limit
     for (const p of shown) {
       const qs = p.questions || [];
       const qLine = qs.length ? qs.map((q) => `• ${truncate(q, 60)}`).join('\n') : '_None_';
       const lines = [
         `**Button:** ${truncate(p.button_text, 60)} \`[${p.button_color}]\``,
-        `**Category:** ${p.category_id ? `\`${p.category_id}\`` : '_None_'}`,
+        `**Category:** ${p.category_id ? `\`${p.category_id}\``: '_None_'}`,
         `**Tickets opened:** ${g.counters[p.panel_id] || 0}`,
         `**Questions (${qs.length}):**\n${truncate(qLine, 400)}`,
       ];
       embed.addFields({ name: truncate(`\`${p.panel_id}\``, DISCORD_LIMITS.EMBED_FIELD_NAME), value: truncate(lines.join('\n'), DISCORD_LIMITS.EMBED_FIELD_VALUE), inline: true });
     }
     if (panels.length > 21) {
-      embed.addFields({ name: `…and ${panels.length - 21} more`, value: 'Use `/ticket panels` for the full list.', inline: false });
+      embed.addFields({ name: `…and ${panels.length - 21} more`, value: 'Use `/ticket panels`for the full list.', inline: false });
     }
   }
 
@@ -533,7 +533,7 @@ async function handleEdit(interaction) {
   if (!checks.isAdmin(interaction.member)) return ephemeral(interaction, 'Admin only.');
   const id = interaction.options.getString('panel_id', true).trim().toLowerCase();
   const g = db.guild(interaction.guildId);
-  if (!g.panels[id]) return ephemeral(interaction, `No panel \`${id}\` found. Use \`/ticket setup\` to create it first.`);
+  if (!g.panels[id]) return ephemeral(interaction, `No panel \`${id}\`found. Use \`/ticket setup\`to create it first.`);
   return interaction.showModal(buildEditModal(g.panels[id]));
 }
 
@@ -541,11 +541,11 @@ async function handleDelete(interaction) {
   if (!checks.isAdmin(interaction.member)) return ephemeral(interaction, 'Admin only.');
   const id = interaction.options.getString('panel_id', true).trim().toLowerCase();
   const g = db.guild(interaction.guildId);
-  if (!g.panels[id]) return ephemeral(interaction, `No panel \`${id}\` exists.`);
+  if (!g.panels[id]) return ephemeral(interaction, `No panel \`${id}\`exists.`);
   delete g.panels[id];
   delete g.counters[id];
   await db.save();
-  return ephemeral(interaction, `Panel \`${id}\` deleted.`);
+  return ephemeral(interaction, `Panel \`${id}\`deleted.`);
 }
 
 // ───── Modal submit handlers ─────
@@ -583,7 +583,7 @@ async function onSetupModal(interaction) {
   const questionsRaw = interaction.fields.getTextInputValue('questions').trim();
 
   if (!PANEL_ID_RE.test(panelIdRaw)) {
-    return ephemeral(interaction, 'Invalid Panel ID. Use lowercase letters, numbers, `_` or `-` (max 32 chars).');
+    return ephemeral(interaction, 'Invalid Panel ID. Use lowercase letters, numbers, `_`or `-`(max 32 chars).');
   }
   if (!buttonText) return ephemeral(interaction, 'Button text is required.');
   if (buttonText.length > DISCORD_LIMITS.BUTTON_LABEL) {
@@ -624,7 +624,7 @@ async function onSetupModal(interaction) {
 
   return ephemeral(
     interaction,
-    `Panel \`${panelIdRaw}\` ${existed ? 'updated' : 'created'}. Use \`/ticket group\` to send it in a channel.`,
+    `Panel \`${panelIdRaw}\`${existed ? 'updated': 'created'}. Use \`/ticket group\`to send it in a channel.`,
   );
 }
 
@@ -652,7 +652,7 @@ async function onPanelModal(interaction) {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const channel = await createTicketChannel(interaction, panel, answers);
   if (channel) {
-    await interaction.editReply({ content: `Ticket created: ${channel}` }).catch(() => {});
+    await interaction.editReply({ content: `Ticket created: ${channel}`}).catch(() => {});
   }
 }
 
@@ -675,7 +675,7 @@ async function onPanelClick(interaction) {
   if (qs.length === 0) {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const channel = await createTicketChannel(interaction, panel, {});
-    if (channel) await interaction.editReply({ content: `Ticket created: ${channel}` }).catch(() => {});
+    if (channel) await interaction.editReply({ content: `Ticket created: ${channel}`}).catch(() => {});
     return;
   }
 
@@ -738,7 +738,7 @@ async function onRequestCloseClick(interaction) {
   if (!ticket) return ephemeral(interaction, 'This is not a ticket channel.');
 
   const isStaff = checks.isStaff(interaction.member);
-  ticket.close_requested_by = isStaff ? 'staff' : 'member';
+  ticket.close_requested_by = isStaff ? 'staff': 'member';
   ticket.close_requested_by_user_id = interaction.user.id;
   await db.save();
 
@@ -746,10 +746,9 @@ async function onRequestCloseClick(interaction) {
     .setColor(EMBED_COLOR_WARN)
     .setTitle(truncate('Close requested', DISCORD_LIMITS.EMBED_TITLE))
     .setDescription(truncate(
-      `<@${interaction.user.id}> requested to close this ticket.\n\n` +
+      `<@${interaction.user.id}> requested to close this ticket.\n\n`+
       (isStaff
-        ? 'The ticket owner **or** staff may confirm.'
-        : 'Only staff may confirm this close.'),
+        ? 'The ticket owner **or** staff may confirm.': 'Only staff may confirm this close.'),
       DISCORD_LIMITS.EMBED_DESCRIPTION,
     ));
 
@@ -780,9 +779,7 @@ async function onConfirmCloseClick(interaction) {
   if (!allowed) {
     return ephemeral(
       interaction,
-      ticket.close_requested_by === 'staff'
-        ? 'Only staff or the ticket owner can confirm this close.'
-        : 'Only staff can confirm this close.',
+      ticket.close_requested_by === 'staff'? 'Only staff or the ticket owner can confirm this close.': 'Only staff can confirm this close.',
     );
   }
 
@@ -847,7 +844,7 @@ async function onSaveTranscriptClick(interaction) {
 
   // Rebuild embeds with updated footer
   const newEmbeds = interaction.message.embeds.map((e) =>
-    EmbedBuilder.from(e).setFooter({ text: 'Transcript saved permanently' }),
+    EmbedBuilder.from(e).setFooter({ text: 'Transcript saved permanently'}),
   );
 
   // Rebuild components — disable the Save button
@@ -888,8 +885,8 @@ async function fetchAllMessages(channel, limit = 500) {
 
 function generateHtmlTranscript(messages, ticket, panel, guild, closedBy, reason) {
   const panelName   = panel?.panel_id || 'unknown';
-  const openedAt    = new Date(ticket.created_at).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
-  const closedAt    = new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
+  const openedAt    = new Date(ticket.created_at).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short'});
+  const closedAt    = new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short'});
   const openedByMsg = messages.find((m) => m.author?.id === ticket.user_id);
   const openedByName = openedByMsg?.author?.username || `${ticket.user_id}`;
   const closedByName = closedBy.username || closedBy.id;
@@ -900,7 +897,7 @@ function generateHtmlTranscript(messages, ticket, panel, guild, closedBy, reason
     const items = Object.entries(ticket.answers)
       .map(([q, a]) => `<div class="qa-item"><div class="qa-q">${escapeHtml(q)}</div><div class="qa-a">${escapeHtml(a || '—')}</div></div>`)
       .join('');
-    qaHtml = `<div class="qa-section"><h2>📋 Form Answers</h2>${items}</div>`;
+    qaHtml = `<div class="qa-section"><h2> Form Answers</h2>${items}</div>`;
   }
 
   // Messages — group consecutive messages by same author within 5 min (Discord-style)
@@ -916,34 +913,32 @@ function generateHtmlTranscript(messages, ticket, panel, guild, closedBy, reason
 
     const avatarUrl = msg.author?.displayAvatarURL({ extension: 'png', size: 64 }) || '';
     const username  = escapeHtml(msg.author?.username || 'Unknown');
-    const ts        = new Date(msgTime).toLocaleString('en-US', { dateStyle: 'short', timeStyle: 'short' });
+    const ts        = new Date(msgTime).toLocaleString('en-US', { dateStyle: 'short', timeStyle: 'short'});
 
     const contentHtml = msg.content
-      ? `<div class="text">${escapeHtml(msg.content)}</div>`
-      : '';
+      ? `<div class="text">${escapeHtml(msg.content)}</div>`: '';
 
     const attachHtml = [...msg.attachments.values()].map((att) => {
       const isImg = /\.(png|jpe?g|gif|webp|svg)$/i.test(att.name || '');
       return isImg
-        ? `<div class="att"><img src="${escapeHtml(att.url)}" alt="${escapeHtml(att.name)}" loading="lazy"></div>`
-        : `<div class="att"><a href="${escapeHtml(att.url)}" target="_blank" rel="noopener">📎 ${escapeHtml(att.name || 'file')}</a></div>`;
+        ? `<div class="att"><img src="${escapeHtml(att.url)}"alt="${escapeHtml(att.name)}"loading="lazy"></div>`: `<div class="att"><a href="${escapeHtml(att.url)}"target="_blank"rel="noopener"> ${escapeHtml(att.name || 'file')}</a></div>`;
     }).join('');
 
     const embedHtml = msg.embeds.map((emb) => {
-      const col   = emb.color ? `#${emb.color.toString(16).padStart(6, '0')}` : '#5865f2';
-      const title = emb.title ? `<div class="emb-title">${escapeHtml(emb.title)}</div>` : '';
-      const desc  = emb.description ? `<div class="emb-desc">${escapeHtml(emb.description)}</div>` : '';
-      return `<div class="emb-wrap"><div class="emb" style="border-left-color:${col}">${title}${desc}</div></div>`;
+      const col   = emb.color ? `#${emb.color.toString(16).padStart(6, '0')}`: '#5865f2';
+      const title = emb.title ? `<div class="emb-title">${escapeHtml(emb.title)}</div>`: '';
+      const desc  = emb.description ? `<div class="emb-desc">${escapeHtml(emb.description)}</div>`: '';
+      return `<div class="emb-wrap"><div class="emb"style="border-left-color:${col}">${title}${desc}</div></div>`;
     }).join('');
 
     if (grouped) {
       msgLines.push(`<div class="msg"><div class="av-ph"></div><div class="body">${contentHtml}${attachHtml}${embedHtml}</div></div>`);
     } else {
-      msgLines.push(`<div class="msg new-grp"><img class="av" src="${escapeHtml(avatarUrl)}" alt="${username}" onerror="this.style.display='none'"><div class="body"><div class="hdr"><span class="uname">${username}</span><span class="ts">${escapeHtml(ts)}</span></div>${contentHtml}${attachHtml}${embedHtml}</div></div>`);
+      msgLines.push(`<div class="msg new-grp"><img class="av"src="${escapeHtml(avatarUrl)}"alt="${username}"onerror="this.style.display='none'"><div class="body"><div class="hdr"><span class="uname">${username}</span><span class="ts">${escapeHtml(ts)}</span></div>${contentHtml}${attachHtml}${embedHtml}</div></div>`);
     }
   }
 
-  return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Transcript #${ticket.ticket_id} — ${escapeHtml(panelName)}</title><style>
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport"content="width=device-width,initial-scale=1"><title>Transcript #${ticket.ticket_id} — ${escapeHtml(panelName)}</title><style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:#313338;color:#dbdee1;font-family:'gg sans','Noto Sans',Whitney,Helvetica,Arial,sans-serif;font-size:16px}
 .hd{background:#1e1f22;padding:14px 20px;border-bottom:2px solid #111214;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
@@ -973,13 +968,13 @@ body{background:#313338;color:#dbdee1;font-family:'gg sans','Noto Sans',Whitney,
 .emb-desc{color:#dbdee1;font-size:14px;white-space:pre-wrap;line-height:1.375}
 </style></head><body>
 <div class="hd">
-  <h1>🎫 Ticket #${ticket.ticket_id} — ${escapeHtml(panelName)}</h1>
+  <h1> Ticket #${ticket.ticket_id} — ${escapeHtml(panelName)}</h1>
   <div class="badge">GUILD <b>${escapeHtml(guild?.name || '')}</b></div>
   <div class="badge">OPENED BY <b>${escapeHtml(openedByName)}</b></div>
   <div class="badge">CLOSED BY <b>${escapeHtml(closedByName)}</b></div>
   <div class="badge">OPENED <b>${escapeHtml(openedAt)}</b></div>
   <div class="badge">CLOSED <b>${escapeHtml(closedAt)}</b></div>
-  ${reason ? `<div class="badge">REASON <b>${escapeHtml(reason)}</b></div>` : ''}
+  ${reason ? `<div class="badge">REASON <b>${escapeHtml(reason)}</b></div>`: ''}
   <div class="badge">MESSAGES <b>${messages.length}</b></div>
 </div>
 ${qaHtml}
@@ -1111,7 +1106,7 @@ async function createTicketChannel(interaction, panel, answers) {
     guild.client.channels.fetch(g.log_ticket_channel_id).then((logCh) => {
       const openedEmbed = new EmbedBuilder()
         .setColor(EMBED_COLOR_OK)
-        .setTitle('🎫 Ticket Opened')
+        .setTitle('Ticket Opened')
         .addFields(
           { name: 'Ticket ID', value: `#${ticketId}`, inline: true },
           { name: 'Panel', value: truncate(panel.panel_id, DISCORD_LIMITS.EMBED_FIELD_VALUE), inline: true },
@@ -1127,7 +1122,7 @@ async function createTicketChannel(interaction, panel, answers) {
   const embed = new EmbedBuilder()
     .setColor(EMBED_COLOR_BRAND)
     .setTitle(truncate(`${panel.button_text}`, DISCORD_LIMITS.EMBED_TITLE))
-    .setDescription(truncate(`Hey <@${owner.id}>! Our support team will be with you shortly. 🍩\n\nPlease describe your issue and we'll help you out!`, DISCORD_LIMITS.EMBED_DESCRIPTION))
+    .setDescription(truncate(`Hey <@${owner.id}>! Our support team will be with you shortly. \n\nPlease describe your issue and we'll help you out!`, DISCORD_LIMITS.EMBED_DESCRIPTION))
     .setFooter({ text: truncate(`${guild.name} Support`, DISCORD_LIMITS.EMBED_FOOTER) })
     .setTimestamp(new Date());
 
@@ -1158,7 +1153,7 @@ async function createTicketChannel(interaction, panel, answers) {
 
   try {
     await channel.send({
-      content: truncate(pings.join(' '), DISCORD_LIMITS.MESSAGE_CONTENT),
+      content: truncate(pings.join(''), DISCORD_LIMITS.MESSAGE_CONTENT),
       embeds: [embed],
       components: [buildTicketTopButtons()],
       allowedMentions: { users: [owner.id], roles: pingIds },
@@ -1229,9 +1224,9 @@ async function closeTicket(interaction, ticket, reason) {
         if (logChannel) {
           const closedEmbed = new EmbedBuilder()
             .setColor(0xED4245)
-            .setTitle('🔒 Ticket Closed')
+            .setTitle('Ticket Closed')
             .addFields(
-              { name: 'Ticket ID', value: ticketId != null ? `#${ticketId}` : 'N/A', inline: true },
+              { name: 'Ticket ID', value: ticketId != null ? `#${ticketId}`: 'N/A', inline: true },
               { name: 'Panel', value: truncate(panel?.panel_id || 'unknown', DISCORD_LIMITS.EMBED_FIELD_VALUE), inline: true },
               { name: 'Channel', value: truncate(channelName, DISCORD_LIMITS.EMBED_FIELD_VALUE), inline: true },
               { name: 'Opened by', value: `<@${ticket.user_id}>`, inline: true },
@@ -1240,16 +1235,16 @@ async function closeTicket(interaction, ticket, reason) {
               { name: 'Opened at', value: `<t:${Math.floor(ticket.created_at / 1000)}:F>`, inline: true },
               { name: 'Closed at', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: true },
             )
-            .setFooter({ text: transcriptPath ? 'Transcript auto-deletes in 3 days' : 'No transcript log channel configured' })
+            .setFooter({ text: transcriptPath ? 'Transcript auto-deletes in 3 days': 'No transcript log channel configured'})
             .setTimestamp();
 
           const components = [];
           if (transcriptKey && transcriptUrl) {
             components.push(new ActionRowBuilder().addComponents(
-              new ButtonBuilder().setLabel('🌐 View Transcript').setStyle(ButtonStyle.Link).setURL(transcriptUrl),
+              new ButtonBuilder().setLabel('View Transcript').setStyle(ButtonStyle.Link).setURL(transcriptUrl),
               new ButtonBuilder()
                 .setCustomId(`${IDS.TICKET_SAVE_TRANSCRIPT}:${transcriptKey}`)
-                .setLabel('💾 Save Transcript')
+                .setLabel('Save Transcript')
                 .setStyle(ButtonStyle.Secondary),
             ));
           }
@@ -1271,8 +1266,8 @@ async function closeTicket(interaction, ticket, reason) {
         const opener = await client.users.fetch(ticket.user_id).catch(() => null);
         if (opener) {
           await opener.send(
-            `🔒 Your ticket **${channelName}** in **${guild.name}** has been closed.\n` +
-            `**Closed by:** ${closedBy.username}\n` +
+            `Your ticket **${channelName}** in **${guild.name}** has been closed.\n`+
+            `**Closed by:** ${closedBy.username}\n`+
             `**Reason:** ${reason || 'No reason provided'}`,
           ).catch(() => {});
         }
@@ -1418,7 +1413,7 @@ async function createLinkedTicket(client, guild, targetUser, staffMember, adminO
       type: 0, // GuildText
       parent: firstPanel?.category_id || undefined,
       permissionOverwrites: overwrites,
-      topic: truncate(`${adminOnly ? 'Admin ticket' : 'Ticket'} for ${targetUser.tag} · opened by ${staffMember.user.tag}`, 1024),
+      topic: truncate(`${adminOnly ? 'Admin ticket': 'Ticket'} for ${targetUser.tag} · opened by ${staffMember.user.tag}`, 1024),
     });
   } catch (e) {
     console.error('[tickets] createLinkedTicket channel failed:', e?.message);
@@ -1429,7 +1424,7 @@ async function createLinkedTicket(client, guild, targetUser, staffMember, adminO
     ticket_id: ticketId,
     channel_id: channel.id,
     user_id: targetUser.id,
-    panel_id: adminOnly ? 'admin-linked' : 'staff-linked',
+    panel_id: adminOnly ? 'admin-linked': 'staff-linked',
     panel_number: ticketId,
     answers: {},
     close_requested_by: null,
@@ -1442,7 +1437,7 @@ async function createLinkedTicket(client, guild, targetUser, staffMember, adminO
   const closeRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(IDS.TICKET_CLOSE)
-      .setLabel('🔒 Close Ticket')
+      .setLabel('Close Ticket')
       .setStyle(ButtonStyle.Danger),
   );
 
@@ -1450,7 +1445,7 @@ async function createLinkedTicket(client, guild, targetUser, staffMember, adminO
     content: `<@${targetUser.id}> <@${staffMember.user.id}>`,
     embeds: [new EmbedBuilder()
       .setColor(adminOnly ? 0xED4245 : 0x5865F2)
-      .setTitle(adminOnly ? '🔒 Admin Ticket' : '🎫 Ticket')
+      .setTitle(adminOnly ? 'Admin Ticket': 'Ticket')
       .setDescription(`Opened by <@${staffMember.user.id}> for <@${targetUser.id}>.`)
       .setTimestamp(),
     ],
