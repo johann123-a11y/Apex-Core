@@ -19,10 +19,9 @@ const Q_TIMEOUT     = 10 * 60 * 1000;
 const APEXZ_API_URL = process.env.APEXZ_API_URL || '';
 const APEXZ_API_KEY = process.env.APEXZ_API_KEY || '';
 
-async function forwardToWebsite(sub, app, decision) {
+async function forwardToWebsite(sub, app, decision, channelInfo = {}) {
   if (!APEXZ_API_URL || !APEXZ_API_KEY) return;
   const ign = sub.answers?.find(a => /ign|username|minecraft/i.test(a.question))?.answer || null;
-  const role = app?.roleOnAccept ? null : null; // role is a Discord role ID — not an IGN role; pass app id as type
   try {
     await fetch(`${APEXZ_API_URL}/api/applications`, {
       method: 'POST',
@@ -34,7 +33,10 @@ async function forwardToWebsite(sub, app, decision) {
         ign,
         role: app?.id || sub.applicationId,
         data: Object.fromEntries((sub.answers || []).map(a => [a.question, a.answer])),
-        status: decision === 'accepted'? 'pending': 'declined',
+        status: decision === 'accepted' ? 'pending' : 'declined',
+        guild_id: channelInfo.guild_id || null,
+        accepted_channel_id: channelInfo.accepted_channel_id || null,
+        denied_channel_id: channelInfo.denied_channel_id || null,
       }),
     });
   } catch (e) {
@@ -620,29 +622,7 @@ async function processReview(interaction, decision, reason) {
   await adb.save();
 
   const app     = g.applications[sub.applicationId];
-
-  // Forward to website: accepted → pending (needs website review), declined → declined
-  forwardToWebsite(sub, app, decision).catch(() => {});
   const guildDb = db.guild(interaction.guildId);
-  const color   = decision === 'accepted'? 0x57F287 : 0xED4245;
-  const titlePfx = decision === 'accepted'? 'Accepted': 'Denied';
-
-  const answerLines = sub.answers.map((a, i) => `**${i + 1}. ${a.question}**\n${a.answer}`).join('\n\n');
-
-  const updatedEmbed = new EmbedBuilder()
-    .setColor(color)
-    .setTitle(`${titlePfx} — ${app?.name ?? sub.applicationId}`)
-    .setDescription(truncate(answerLines, DISCORD_LIMITS.EMBED_DESCRIPTION))
-    .addFields(
-      { name: 'User',        value: `<@${sub.userId}>`,                   inline: true  },
-      { name: 'Username',    value: sub.username,                          inline: true  },
-      { name: 'User ID',     value: sub.userId,                            inline: true  },
-      { name: 'Reviewed by', value: `<@${interaction.user.id}>`,          inline: true  },
-      { name: 'Time spent',  value: fmtDuration(sub.timeSpentMs),          inline: true  },
-      { name: 'Reason',      value: reason || '_No reason provided_',      inline: false },
-    )
-    .setFooter({ text: `Submission #${submissionId}`})
-    .setTimestamp();
 
   // Delete pending message
   if (sub.pendingChannelId && sub.pendingMessageId) {
@@ -651,49 +631,87 @@ async function processReview(interaction, decision, reason) {
     if (msg) await msg.delete().catch(() => {});
   }
 
-  // Send to accepted/denied channel
-  const targetId = decision === 'accepted'? guildDb.application_accepted_channel_id
-    : guildDb.application_denied_channel_id;
-  if (targetId) {
-    const targetCh = await interaction.client.channels.fetch(targetId).catch(() => null);
-    if (targetCh?.isTextBased()) await targetCh.send({ embeds: [updatedEmbed] }).catch(() => {});
+  if (decision === 'accepted') {
+    // Forward to website as 'pending' — website staff makes the final call
+    forwardToWebsite(sub, app, decision, {
+      guild_id: interaction.guildId,
+      accepted_channel_id: guildDb.application_accepted_channel_id || null,
+      denied_channel_id:   guildDb.application_denied_channel_id   || null,
+    }).catch(() => {});
+
+    const replyMsg = 'Forwarded to website for final review.';
+    if (interaction.isModalSubmit()) {
+      return interaction.reply({ content: replyMsg, flags: MessageFlags.Ephemeral });
+    }
+    try {
+      return await interaction.update({
+        embeds: [new EmbedBuilder()
+          .setColor(0xFAA61A)
+          .setTitle(`Forwarded — ${app?.name ?? sub.applicationId}`)
+          .setDescription('Forwarded to website staff for final review.')
+          .addFields(
+            { name: 'User',     value: `<@${sub.userId}>`, inline: true },
+            { name: 'Username', value: sub.username,        inline: true },
+          )
+          .setFooter({ text: `Submission #${submissionId}` })
+          .setTimestamp()],
+        components: [],
+      });
+    } catch {
+      return interaction.reply({ content: replyMsg, flags: MessageFlags.Ephemeral }).catch(() => {});
+    }
   }
 
-  // DM applicant + give roles if accepted
+  // decision === 'declined' — final at Discord stage
+  forwardToWebsite(sub, app, decision, {
+    guild_id: interaction.guildId,
+    accepted_channel_id: guildDb.application_accepted_channel_id || null,
+    denied_channel_id:   guildDb.application_denied_channel_id   || null,
+  }).catch(() => {});
+
+  const declinedEmbed = new EmbedBuilder()
+    .setColor(0xED4245)
+    .setTitle(`Declined — ${app?.name ?? sub.applicationId}`)
+    .setDescription(truncate(sub.answers.map((a, i) => `**${i + 1}. ${a.question}**\n${a.answer}`).join('\n\n'), DISCORD_LIMITS.EMBED_DESCRIPTION))
+    .addFields(
+      { name: 'User',        value: `<@${sub.userId}>`,           inline: true  },
+      { name: 'Username',    value: sub.username,                  inline: true  },
+      { name: 'Reviewed by', value: `<@${interaction.user.id}>`,  inline: true  },
+      { name: 'Reason',      value: reason || '_No reason provided_', inline: false },
+    )
+    .setFooter({ text: `Submission #${submissionId}` })
+    .setTimestamp();
+
+  // Post to declined channel
+  if (guildDb.application_denied_channel_id) {
+    const targetCh = await interaction.client.channels.fetch(guildDb.application_denied_channel_id).catch(() => null);
+    if (targetCh?.isTextBased()) await targetCh.send({ embeds: [declinedEmbed] }).catch(() => {});
+  }
+
+  // DM applicant
   try {
     const applicant = await interaction.client.users.fetch(sub.userId).catch(() => null);
     if (applicant) {
-      const dmEmbed = new EmbedBuilder()
-        .setColor(color)
-        .setTitle(decision === 'accepted'? 'You got accepted!': 'You got denied!')
+      await applicant.send({ embeds: [new EmbedBuilder()
+        .setColor(0xED4245)
+        .setTitle('Application declined')
         .setDescription(
-          `You applied for **${app?.applyingFor ?? 'Unknown'}** in **${interaction.guild.name}**.\n\n`+
-          `**Decision:** ${decision === 'accepted'? 'Accepted': 'Denied'}\n`+
-          `**By:** ${interaction.user.username}\n`+
+          `You applied for **${app?.applyingFor ?? 'Unknown'}** in **${interaction.guild.name}**.\n\n` +
+          `**Decision:** Declined\n` +
           `**Reason:** ${reason || 'No reason provided'}`,
         )
-        .setTimestamp();
-      await applicant.send({ embeds: [dmEmbed] }).catch(() => {});
-
-      if (decision === 'accepted') {
-        const member = await interaction.guild.members.fetch(sub.userId).catch(() => null);
-        if (member) {
-          if (guildDb.staff_role_id)  await member.roles.add(guildDb.staff_role_id,    'Application accepted — staff role').catch(() => {});
-          if (app?.roleOnAccept && app.roleOnAccept !== guildDb.staff_role_id)
-            await member.roles.add(app.roleOnAccept, 'Application accepted').catch(() => {});
-        }
-      }
+        .setTimestamp(),
+      ]}).catch(() => {});
     }
   } catch { /* ignore */ }
 
-  // Reply to reviewer
   if (interaction.isModalSubmit()) {
-    return interaction.reply({ content: `${decision === 'accepted'? 'Accepted': 'Denied'}.`, flags: MessageFlags.Ephemeral });
+    return interaction.reply({ content: 'Declined.', flags: MessageFlags.Ephemeral });
   }
   try {
-    return await interaction.update({ embeds: [updatedEmbed], components: [] });
+    return await interaction.update({ embeds: [declinedEmbed], components: [] });
   } catch {
-    return interaction.reply({ content: `${decision === 'accepted'? 'Accepted': 'Denied'}.`, flags: MessageFlags.Ephemeral }).catch(() => {});
+    return interaction.reply({ content: 'Declined.', flags: MessageFlags.Ephemeral }).catch(() => {});
   }
 }
 
