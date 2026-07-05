@@ -14,8 +14,33 @@ const checks  = require('../lib/checks');
 const tickets = require('./tickets');
 const { truncate, DISCORD_LIMITS } = require('../config');
 
-const COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
-const Q_TIMEOUT   = 10 * 60 * 1000;
+const COOLDOWN_MS   = 7 * 24 * 60 * 60 * 1000;
+const Q_TIMEOUT     = 10 * 60 * 1000;
+const APEXZ_API_URL = process.env.APEXZ_API_URL || '';
+const APEXZ_API_KEY = process.env.APEXZ_API_KEY || '';
+
+async function forwardToWebsite(sub, app, decision) {
+  if (!APEXZ_API_URL || !APEXZ_API_KEY) return;
+  const ign = sub.answers?.find(a => /ign|username|minecraft/i.test(a.question))?.answer || null;
+  const role = app?.roleOnAccept ? null : null; // role is a Discord role ID — not an IGN role; pass app id as type
+  try {
+    await fetch(`${APEXZ_API_URL}/api/applications`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': APEXZ_API_KEY },
+      body: JSON.stringify({
+        type: sub.applicationId,
+        discord_id: sub.userId,
+        discord_username: sub.username,
+        ign,
+        role: app?.id || sub.applicationId,
+        data: Object.fromEntries((sub.answers || []).map(a => [a.question, a.answer])),
+        status: decision === 'accepted'? 'pending': 'declined',
+      }),
+    });
+  } catch (e) {
+    console.error('[applications] failed to forward to website:', e?.message);
+  }
+}
 
 // ─── Custom ID constants ───────────────────────────────────────────────────────
 const ID = {
@@ -63,7 +88,7 @@ function fmtDuration(ms) {
   if (ms < 3600000)  return `${Math.floor(ms / 60000)}m`;
   const h = Math.floor(ms / 3600000);
   const m = Math.floor((ms % 3600000) / 60000);
-  return m ? `${h}h ${m}m` : `${h}h`;
+  return m ? `${h}h ${m}m`: `${h}h`;
 }
 
 // ─── Command builder ──────────────────────────────────────────────────────────
@@ -94,11 +119,11 @@ const command = new SlashCommandBuilder()
 
 function buildSetupEmbed(app) {
   const qLines = app.questions.length
-    ? app.questions.map((q, i) => `**${i + 1}.** [${q.type === 'yes_no' ? 'Yes/No' : 'Text'}] ${q.text}`)
+    ? app.questions.map((q, i) => `**${i + 1}.** [${q.type === 'yes_no'? 'Yes/No': 'Text'}] ${q.text}`)
     : ['_None yet — add them below!_'];
   return new EmbedBuilder()
     .setColor(0x5865F2)
-    .setTitle('✅ Application Created')
+    .setTitle('Application Created')
     .addFields(
       { name: 'Name', value: app.name,        inline: true },
       { name: 'For',  value: app.applyingFor, inline: true },
@@ -109,9 +134,9 @@ function buildSetupEmbed(app) {
 
 function buildSetupButtons(appId, disabled = false) {
   return new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(ID.ADD_YN + appId).setLabel('➕ Yes/No Question').setStyle(ButtonStyle.Secondary).setDisabled(disabled),
-    new ButtonBuilder().setCustomId(ID.ADD_TXT + appId).setLabel('➕ Text Question').setStyle(ButtonStyle.Primary).setDisabled(disabled),
-    new ButtonBuilder().setCustomId(ID.DONE + appId).setLabel('✅ Done').setStyle(ButtonStyle.Success).setDisabled(disabled),
+    new ButtonBuilder().setCustomId(ID.ADD_YN + appId).setLabel('Yes/No Question').setStyle(ButtonStyle.Secondary).setDisabled(disabled),
+    new ButtonBuilder().setCustomId(ID.ADD_TXT + appId).setLabel('Text Question').setStyle(ButtonStyle.Primary).setDisabled(disabled),
+    new ButtonBuilder().setCustomId(ID.DONE + appId).setLabel('Done').setStyle(ButtonStyle.Success).setDisabled(disabled),
   );
 }
 
@@ -166,14 +191,14 @@ async function onAddQuestionBtn(interaction, type) {
   if (!checks.isAdmin(interaction.member))
     return interaction.reply({ content: 'Admins only.', flags: MessageFlags.Ephemeral });
 
-  const appId   = interaction.customId.slice((type === 'yes_no' ? ID.ADD_YN : ID.ADD_TXT).length);
-  const modalId = (type === 'yes_no' ? ID.YN_MODAL : ID.TXT_MODAL) + appId;
+  const appId   = interaction.customId.slice((type === 'yes_no'? ID.ADD_YN : ID.ADD_TXT).length);
+  const modalId = (type === 'yes_no'? ID.YN_MODAL : ID.TXT_MODAL) + appId;
 
   const modal = new ModalBuilder().setCustomId(modalId).setTitle('Add Question');
   modal.addComponents(new ActionRowBuilder().addComponents(
     new TextInputBuilder()
       .setCustomId('question')
-      .setLabel(type === 'yes_no' ? 'Yes/No question text' : 'Text question text')
+      .setLabel(type === 'yes_no'? 'Yes/No question text': 'Text question text')
       .setStyle(TextInputStyle.Paragraph)
       .setRequired(true)
       .setMaxLength(300),
@@ -185,7 +210,7 @@ async function onQuestionModal(interaction, type) {
   if (!checks.isAdmin(interaction.member))
     return interaction.reply({ content: 'Admins only.', flags: MessageFlags.Ephemeral });
 
-  const prefix = type === 'yes_no' ? ID.YN_MODAL : ID.TXT_MODAL;
+  const prefix = type === 'yes_no'? ID.YN_MODAL : ID.TXT_MODAL;
   const appId  = interaction.customId.slice(prefix.length);
   const text   = interaction.fields.getTextInputValue('question').trim();
 
@@ -215,17 +240,17 @@ async function onDoneBtn(interaction) {
   await adb.save();
 
   const qLines = app.questions.length
-    ? app.questions.map((q, i) => `**${i + 1}.** [${q.type === 'yes_no' ? 'Yes/No' : 'Text'}] ${q.text}`)
+    ? app.questions.map((q, i) => `**${i + 1}.** [${q.type === 'yes_no'? 'Yes/No': 'Text'}] ${q.text}`)
     : ['_No questions added._'];
 
   const embed = new EmbedBuilder()
     .setColor(0x57F287)
-    .setTitle('✅ Application Ready')
+    .setTitle('Application Ready')
     .addFields(
       { name: 'Name', value: app.name,        inline: true },
       { name: 'For',  value: app.applyingFor, inline: true },
       { name: 'Questions', value: truncate(qLines.join('\n'), DISCORD_LIMITS.EMBED_FIELD_VALUE), inline: false },
-      { name: 'Status', value: '✅ Application is ready! Use `/application group` to post it.', inline: false },
+      { name: 'Status', value: 'Application is ready! Use `/application group`to post it.', inline: false },
     )
     .setTimestamp();
 
@@ -269,7 +294,7 @@ async function onDescriptionModal(interaction) {
     footer:      interaction.fields.getTextInputValue('footer').trim(),
   };
   await adb.save();
-  return interaction.reply({ content: '✅ Panel description saved.', flags: MessageFlags.Ephemeral });
+  return interaction.reply({ content: 'Panel description saved.', flags: MessageFlags.Ephemeral });
 }
 
 // ─── /application group ───────────────────────────────────────────────────────
@@ -285,7 +310,7 @@ async function handleGroup(interaction) {
 
   const options = apps.slice(0, 25).map((a) =>
     new StringSelectMenuOptionBuilder()
-      .setLabel(truncate((a.draft ? '⚠️ ' : '') + a.name, 90))
+      .setLabel(truncate((a.draft ? '': '') + a.name, 90))
       .setValue(a.id)
       .setDescription(truncate(`Applying for: ${a.applyingFor}`, 90)),
   );
@@ -346,7 +371,7 @@ async function onGroupSelect(interaction) {
   g.activeMessages.push({ messageId: sent.id, channelId: interaction.channel.id, applicationIds: selectedIds });
   await adb.save();
 
-  return interaction.update({ content: '✅ Panel sent!', components: [] });
+  return interaction.update({ content: 'Panel sent!', components: [] });
 }
 
 // ─── Channel config ───────────────────────────────────────────────────────────
@@ -368,8 +393,8 @@ async function handleChannel(interaction, type) {
   g[keyMap[type]] = ch.id;
   await db.save();
 
-  const labels = { pending: 'Pending', accepted: 'Accepted', denied: 'Denied' };
-  return interaction.reply({ content: `✅ ${labels[type]} channel set to ${ch}.`, flags: MessageFlags.Ephemeral });
+  const labels = { pending: 'Pending', accepted: 'Accepted', denied: 'Denied'};
+  return interaction.reply({ content: `${labels[type]} channel set to ${ch}.`, flags: MessageFlags.Ephemeral });
 }
 
 // ─── Apply select (user picks application) ────────────────────────────────────
@@ -395,7 +420,7 @@ async function onApplySelect(interaction) {
     const remaining = COOLDOWN_MS - (Date.now() - cooldown.lastApplied);
     const days  = Math.floor(remaining / 86400000);
     const hours = Math.floor((remaining % 86400000) / 3600000);
-    const str   = days > 0 ? `${days} day${days !== 1 ? 's' : ''}` : `${hours} hour${hours !== 1 ? 's' : ''}`;
+    const str   = days > 0 ? `${days} day${days !== 1 ? 's': ''}`: `${hours} hour${hours !== 1 ? 's': ''}`;
     return interaction.reply({ content: `You already applied for **${app.name}** recently. You can apply again in **${str}**.`, flags: MessageFlags.Ephemeral });
   }
 
@@ -408,13 +433,13 @@ async function onApplySelect(interaction) {
   try {
     dmChannel = await interaction.user.createDM();
     await dmChannel.send(
-      `📋 **${app.name}** — ${app.applyingFor}\nPlease answer the following questions. Take your time — you have **10 minutes** per question.`,
+      `**${app.name}** — ${app.applyingFor}\nPlease answer the following questions. Take your time — you have **10 minutes** per question.`,
     );
   } catch {
     return interaction.reply({ content: "I couldn't DM you. Please open your DMs and try again.", flags: MessageFlags.Ephemeral });
   }
 
-  await interaction.reply({ content: '📬 Check your DMs! I sent you the application questions.', flags: MessageFlags.Ephemeral });
+  await interaction.reply({ content: 'Check your DMs! I sent you the application questions.', flags: MessageFlags.Ephemeral });
 
   runApplicationFlow(interaction.client, interaction.guild, interaction.user, app, interaction.guildId, dmChannel)
     .catch((e) => console.error('[applications] flow error:', e?.message));
@@ -430,8 +455,8 @@ async function runApplicationFlow(client, guild, user, app, guildId, dmChannel) 
 
     if (q.type === 'yes_no') {
       const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`app:ynbtn:yes:${i}`).setLabel('✅ Yes').setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId(`app:ynbtn:no:${i}`).setLabel('❌ No').setStyle(ButtonStyle.Danger),
+        new ButtonBuilder().setCustomId(`app:ynbtn:yes:${i}`).setLabel('Yes').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId(`app:ynbtn:no:${i}`).setLabel('No').setStyle(ButtonStyle.Danger),
       );
       const qMsg = await dmChannel.send({ content: `**${i + 1}. ${q.text}**`, components: [row] });
 
@@ -442,10 +467,10 @@ async function runApplicationFlow(client, guild, user, app, guildId, dmChannel) 
           time: Q_TIMEOUT,
           componentType: ComponentType.Button,
         });
-        answer = btn.customId.includes(':yes:') ? 'Yes' : 'No';
+        answer = btn.customId.includes(':yes:') ? 'Yes': 'No';
         await btn.update({ content: `**${i + 1}. ${q.text}**\n> ${answer}`, components: [] });
       } catch {
-        await dmChannel.send('⏰ Application timed out. You can restart it anytime.').catch(() => {});
+        await dmChannel.send('Application timed out. You can restart it anytime.').catch(() => {});
         return;
       }
       answers.push({ question: q.text, type: q.type, answer });
@@ -460,14 +485,14 @@ async function runApplicationFlow(client, guild, user, app, guildId, dmChannel) 
         });
         answer = collected.first().content.trim().slice(0, 1000);
       } catch {
-        await dmChannel.send('⏰ Application timed out. You can restart it anytime.').catch(() => {});
+        await dmChannel.send('Application timed out. You can restart it anytime.').catch(() => {});
         return;
       }
       answers.push({ question: q.text, type: q.type, answer });
     }
   }
 
-  await dmChannel.send('✅ Your application has been submitted! You will be notified of the decision.');
+  await dmChannel.send('Your application has been submitted! You will be notified of the decision.');
 
   // Save submission
   const g            = adb.guild(guildId);
@@ -495,13 +520,13 @@ async function runApplicationFlow(client, guild, user, app, guildId, dmChannel) 
   if (!pendingCh?.isTextBased()) return;
 
   const member = await guild.members.fetch(user.id).catch(() => null);
-  const joinedStr = member?.joinedAt ? `<t:${Math.floor(member.joinedAt.getTime() / 1000)}:R>` : '_Unknown_';
+  const joinedStr = member?.joinedAt ? `<t:${Math.floor(member.joinedAt.getTime() / 1000)}:R>`: '_Unknown_';
 
   const answerLines = answers.map((a, i) => `**${i + 1}. ${a.question}**\n${a.answer}`).join('\n\n');
 
   const pendingEmbed = new EmbedBuilder()
     .setColor(0xFAA61A)
-    .setTitle(`📋 ${app.name}`)
+    .setTitle(`${app.name}`)
     .setDescription(truncate(answerLines, DISCORD_LIMITS.EMBED_DESCRIPTION))
     .setThumbnail(user.displayAvatarURL())
     .addFields(
@@ -510,19 +535,19 @@ async function runApplicationFlow(client, guild, user, app, guildId, dmChannel) 
       { name: 'Joined',   value: joinedStr,         inline: true },
       { name: 'User ID',  value: user.id,           inline: false },
     )
-    .setFooter({ text: `Submission #${submissionId} • ${app.applyingFor}` })
+    .setFooter({ text: `Submission #${submissionId} • ${app.applyingFor}`})
     .setTimestamp();
 
   const buttons = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(ID.ACCEPT    + submissionId).setLabel('✅ Accept').setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId(ID.DENY      + submissionId).setLabel('❌ Deny').setStyle(ButtonStyle.Danger),
-    new ButtonBuilder().setCustomId(ID.ACCEPT_R  + submissionId).setLabel('✅ Accept with reason').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(ID.DENY_R    + submissionId).setLabel('❌ Deny with reason').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(ID.ACCEPT    + submissionId).setLabel('Accept').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId(ID.DENY      + submissionId).setLabel('Deny').setStyle(ButtonStyle.Danger),
+    new ButtonBuilder().setCustomId(ID.ACCEPT_R  + submissionId).setLabel('Accept with reason').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(ID.DENY_R    + submissionId).setLabel('Deny with reason').setStyle(ButtonStyle.Secondary),
   );
   const ticketButtons = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(ID.OPEN_TKT  + submissionId).setLabel('🎫 Open Ticket').setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId(ID.OPEN_ATKT + submissionId).setLabel('🔒 Open Admin Ticket').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(ID.APP_BL    + submissionId).setLabel('🚫 Application Blacklist').setStyle(ButtonStyle.Danger),
+    new ButtonBuilder().setCustomId(ID.OPEN_TKT  + submissionId).setLabel('Open Ticket').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId(ID.OPEN_ATKT + submissionId).setLabel('Open Admin Ticket').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(ID.APP_BL    + submissionId).setLabel('Application Blacklist').setStyle(ButtonStyle.Danger),
   );
 
   const sent = await pendingCh.send({ embeds: [pendingEmbed], components: [buttons, ticketButtons] });
@@ -595,9 +620,12 @@ async function processReview(interaction, decision, reason) {
   await adb.save();
 
   const app     = g.applications[sub.applicationId];
+
+  // Forward to website: accepted → pending (needs website review), declined → declined
+  forwardToWebsite(sub, app, decision).catch(() => {});
   const guildDb = db.guild(interaction.guildId);
-  const color   = decision === 'accepted' ? 0x57F287 : 0xED4245;
-  const titlePfx = decision === 'accepted' ? '✅ Accepted' : '❌ Denied';
+  const color   = decision === 'accepted'? 0x57F287 : 0xED4245;
+  const titlePfx = decision === 'accepted'? 'Accepted': 'Denied';
 
   const answerLines = sub.answers.map((a, i) => `**${i + 1}. ${a.question}**\n${a.answer}`).join('\n\n');
 
@@ -613,7 +641,7 @@ async function processReview(interaction, decision, reason) {
       { name: 'Time spent',  value: fmtDuration(sub.timeSpentMs),          inline: true  },
       { name: 'Reason',      value: reason || '_No reason provided_',      inline: false },
     )
-    .setFooter({ text: `Submission #${submissionId}` })
+    .setFooter({ text: `Submission #${submissionId}`})
     .setTimestamp();
 
   // Delete pending message
@@ -624,8 +652,7 @@ async function processReview(interaction, decision, reason) {
   }
 
   // Send to accepted/denied channel
-  const targetId = decision === 'accepted'
-    ? guildDb.application_accepted_channel_id
+  const targetId = decision === 'accepted'? guildDb.application_accepted_channel_id
     : guildDb.application_denied_channel_id;
   if (targetId) {
     const targetCh = await interaction.client.channels.fetch(targetId).catch(() => null);
@@ -638,11 +665,11 @@ async function processReview(interaction, decision, reason) {
     if (applicant) {
       const dmEmbed = new EmbedBuilder()
         .setColor(color)
-        .setTitle(decision === 'accepted' ? '✅ You got accepted!' : '❌ You got denied!')
+        .setTitle(decision === 'accepted'? 'You got accepted!': 'You got denied!')
         .setDescription(
-          `You applied for **${app?.applyingFor ?? 'Unknown'}** in **${interaction.guild.name}**.\n\n` +
-          `**Decision:** ${decision === 'accepted' ? 'Accepted' : 'Denied'}\n` +
-          `**By:** ${interaction.user.username}\n` +
+          `You applied for **${app?.applyingFor ?? 'Unknown'}** in **${interaction.guild.name}**.\n\n`+
+          `**Decision:** ${decision === 'accepted'? 'Accepted': 'Denied'}\n`+
+          `**By:** ${interaction.user.username}\n`+
           `**Reason:** ${reason || 'No reason provided'}`,
         )
         .setTimestamp();
@@ -661,9 +688,13 @@ async function processReview(interaction, decision, reason) {
 
   // Reply to reviewer
   if (interaction.isModalSubmit()) {
-    return interaction.reply({ content: `${decision === 'accepted' ? '✅ Accepted' : '❌ Denied'}.`, flags: MessageFlags.Ephemeral });
+    return interaction.reply({ content: `${decision === 'accepted'? 'Accepted': 'Denied'}.`, flags: MessageFlags.Ephemeral });
   }
-  return interaction.update({ embeds: [updatedEmbed], components: [] });
+  try {
+    return await interaction.update({ embeds: [updatedEmbed], components: [] });
+  } catch {
+    return interaction.reply({ content: `${decision === 'accepted'? 'Accepted': 'Denied'}.`, flags: MessageFlags.Ephemeral }).catch(() => {});
+  }
 }
 
 // ─── /application info — overview ────────────────────────────────────────────
@@ -678,44 +709,44 @@ async function handleInfo(interaction) {
   const d       = g.panelDescription;
 
   const chLines = [
-    `**Pending:**  ${guildDb.application_pending_channel_id  ? `<#${guildDb.application_pending_channel_id}>`  : '_Not set_'}`,
-    `**Accepted:** ${guildDb.application_accepted_channel_id ? `<#${guildDb.application_accepted_channel_id}>` : '_Not set_'}`,
-    `**Denied:**   ${guildDb.application_denied_channel_id   ? `<#${guildDb.application_denied_channel_id}>`   : '_Not set_'}`,
+    `**Pending:**  ${guildDb.application_pending_channel_id  ? `<#${guildDb.application_pending_channel_id}>`: '_Not set_'}`,
+    `**Accepted:** ${guildDb.application_accepted_channel_id ? `<#${guildDb.application_accepted_channel_id}>`: '_Not set_'}`,
+    `**Denied:**   ${guildDb.application_denied_channel_id   ? `<#${guildDb.application_denied_channel_id}>`: '_Not set_'}`,
   ];
 
   const descVal = (d.title || d.subtitle || d.description)
     ? [
-        d.title       ? `**Title:** ${truncate(d.title, 80)}`       : null,
-        d.subtitle    ? `**Subtitle:** ${truncate(d.subtitle, 80)}` : null,
-        d.description ? `**Body:** ${truncate(d.description, 150)}` : null,
-        d.footer      ? `**Footer:** ${truncate(d.footer, 80)}`     : null,
+        d.title       ? `**Title:** ${truncate(d.title, 80)}`: null,
+        d.subtitle    ? `**Subtitle:** ${truncate(d.subtitle, 80)}`: null,
+        d.description ? `**Body:** ${truncate(d.description, 150)}`: null,
+        d.footer      ? `**Footer:** ${truncate(d.footer, 80)}`: null,
       ].filter(Boolean).join('\n')
     : '_Not set — use `/application description`_';
 
   const embed = new EmbedBuilder()
     .setColor(0x5865F2)
-    .setTitle('📋 Application System — Overview')
+    .setTitle('Application System — Overview')
     .addFields(
-      { name: '📥 Channels',          value: chLines.join('\n'), inline: false },
-      { name: '📝 Panel Description', value: descVal,           inline: false },
+      { name: 'Channels',          value: chLines.join('\n'), inline: false },
+      { name: 'Panel Description', value: descVal,           inline: false },
     )
     .setTimestamp();
 
   if (!apps.length) {
-    embed.addFields({ name: '📋 Applications', value: '_None yet — use `/application setup`_', inline: false });
+    embed.addFields({ name: 'Applications', value: '_None yet — use `/application setup`_', inline: false });
     return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
   }
 
   const appLines = apps.map((a) =>
-    `${a.draft ? '⚠️' : '✅'} **${a.name}** (\`${a.id}\`) — for: ${a.applyingFor} · ${a.questions.length} question${a.questions.length !== 1 ? 's' : ''}`,
+    `${a.draft ? '': ''} **${a.name}** (\`${a.id}\`) — for: ${a.applyingFor} · ${a.questions.length} question${a.questions.length !== 1 ? 's': ''}`,
   );
-  embed.addFields({ name: `📋 Applications (${apps.length})`, value: truncate(appLines.join('\n'), DISCORD_LIMITS.EMBED_FIELD_VALUE), inline: false });
+  embed.addFields({ name: `Applications (${apps.length})`, value: truncate(appLines.join('\n'), DISCORD_LIMITS.EMBED_FIELD_VALUE), inline: false });
 
   const options = apps.slice(0, 25).map((a) =>
     new StringSelectMenuOptionBuilder()
-      .setLabel(truncate((a.draft ? '⚠️ ' : '') + a.name, 90))
+      .setLabel(truncate((a.draft ? '': '') + a.name, 90))
       .setValue(a.id)
-      .setDescription(truncate(`${a.applyingFor} · ${a.questions.length} question${a.questions.length !== 1 ? 's' : ''}`, 90)),
+      .setDescription(truncate(`${a.applyingFor} · ${a.questions.length} question${a.questions.length !== 1 ? 's': ''}`, 90)),
   );
 
   return interaction.reply({
@@ -735,30 +766,30 @@ async function handleInfo(interaction) {
 
 function buildAppDetailEmbed(app) {
   const qLines = app.questions.length
-    ? app.questions.map((q, i) => `**${i + 1}.** [${q.type === 'yes_no' ? 'Yes/No' : 'Text'}] ${q.text}`)
+    ? app.questions.map((q, i) => `**${i + 1}.** [${q.type === 'yes_no'? 'Yes/No': 'Text'}] ${q.text}`)
     : ['_No questions yet._'];
   return new EmbedBuilder()
     .setColor(app.draft ? 0xFAA61A : 0x57F287)
-    .setTitle(`📋 ${app.name}`)
+    .setTitle(`${app.name}`)
     .addFields(
       { name: 'Applying For',   value: app.applyingFor,                                         inline: true  },
-      { name: 'Status',         value: app.draft ? '⚠️ Draft' : '✅ Ready',                      inline: true  },
+      { name: 'Status',         value: app.draft ? 'Draft': 'Ready',                      inline: true  },
       { name: 'ID',             value: `\`${app.id}\``,                                         inline: true  },
-      { name: 'Role on Accept', value: app.roleOnAccept ? `<@&${app.roleOnAccept}>` : '_None_', inline: true  },
+      { name: 'Role on Accept', value: app.roleOnAccept ? `<@&${app.roleOnAccept}>`: '_None_', inline: true  },
       { name: `Questions (${app.questions.length})`, value: truncate(qLines.join('\n'), DISCORD_LIMITS.EMBED_FIELD_VALUE), inline: false },
     )
-    .setFooter({ text: 'Use the buttons below to edit this application' })
+    .setFooter({ text: 'Use the buttons below to edit this application'})
     .setTimestamp();
 }
 
 function buildAppDetailComponents(appId, hasQuestions) {
   return [
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(ID.EDIT_DET + appId).setLabel('✏️ Edit Details').setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId(ID.IAYN     + appId).setLabel('➕ Yes/No Q').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(ID.IATXT    + appId).setLabel('➕ Text Q').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(ID.RMQ_BTN  + appId).setLabel('➖ Remove Q').setStyle(ButtonStyle.Secondary).setDisabled(!hasQuestions),
-      new ButtonBuilder().setCustomId(ID.DEL_BTN  + appId).setLabel('🗑️ Delete').setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId(ID.EDIT_DET + appId).setLabel('Edit Details').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId(ID.IAYN     + appId).setLabel('Yes/No Q').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(ID.IATXT    + appId).setLabel('Text Q').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(ID.RMQ_BTN  + appId).setLabel('Remove Q').setStyle(ButtonStyle.Secondary).setDisabled(!hasQuestions),
+      new ButtonBuilder().setCustomId(ID.DEL_BTN  + appId).setLabel('Delete').setStyle(ButtonStyle.Danger),
     ),
   ];
 }
@@ -824,14 +855,14 @@ async function onInfoAddQuestionBtn(interaction, type) {
   if (!checks.isAdmin(interaction.member))
     return interaction.reply({ content: 'Admins only.', flags: MessageFlags.Ephemeral });
 
-  const appId   = interaction.customId.slice((type === 'yes_no' ? ID.IAYN : ID.IATXT).length);
-  const modalId = (type === 'yes_no' ? ID.IAYN_M : ID.IATXT_M) + appId;
+  const appId   = interaction.customId.slice((type === 'yes_no'? ID.IAYN : ID.IATXT).length);
+  const modalId = (type === 'yes_no'? ID.IAYN_M : ID.IATXT_M) + appId;
 
   const modal = new ModalBuilder().setCustomId(modalId).setTitle('Add Question');
   modal.addComponents(new ActionRowBuilder().addComponents(
     new TextInputBuilder()
       .setCustomId('question')
-      .setLabel(type === 'yes_no' ? 'Yes/No question text' : 'Text question text')
+      .setLabel(type === 'yes_no'? 'Yes/No question text': 'Text question text')
       .setStyle(TextInputStyle.Paragraph)
       .setRequired(true).setMaxLength(300),
   ));
@@ -842,7 +873,7 @@ async function onInfoQuestionModal(interaction, type) {
   if (!checks.isAdmin(interaction.member))
     return interaction.reply({ content: 'Admins only.', flags: MessageFlags.Ephemeral });
 
-  const prefix = type === 'yes_no' ? ID.IAYN_M : ID.IATXT_M;
+  const prefix = type === 'yes_no'? ID.IAYN_M : ID.IATXT_M;
   const appId  = interaction.customId.slice(prefix.length);
   const text   = interaction.fields.getTextInputValue('question').trim();
 
@@ -870,7 +901,7 @@ async function onRemoveQBtn(interaction) {
     new StringSelectMenuOptionBuilder()
       .setLabel(truncate(`${i + 1}. ${q.text}`, 90))
       .setValue(String(i))
-      .setDescription(q.type === 'yes_no' ? 'Yes/No' : 'Text'),
+      .setDescription(q.type === 'yes_no'? 'Yes/No': 'Text'),
   );
 
   return interaction.update({
@@ -918,10 +949,10 @@ async function onDeleteBtn(interaction) {
   if (!app) return interaction.update({ content: 'Application not found.', embeds: [], components: [] });
 
   return interaction.update({
-    content: `⚠️ Are you sure you want to delete **${app.name}**? This cannot be undone.`,
+    content: `Are you sure you want to delete **${app.name}**? This cannot be undone.`,
     embeds: [],
     components: [new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(ID.DEL_CONF + appId).setLabel('🗑️ Yes, delete').setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId(ID.DEL_CONF + appId).setLabel('Yes, delete').setStyle(ButtonStyle.Danger),
       new ButtonBuilder().setCustomId(ID.BACK + appId).setLabel('← Cancel').setStyle(ButtonStyle.Secondary),
     )],
   });
@@ -937,7 +968,7 @@ async function onDeleteConfirmBtn(interaction) {
   delete g.applications[appId];
   await adb.save();
 
-  return interaction.update({ content: `🗑️ **${name}** has been deleted.`, embeds: [], components: [] });
+  return interaction.update({ content: `**${name}** has been deleted.`, embeds: [], components: [] });
 }
 
 async function onBackBtn(interaction) {
@@ -966,7 +997,7 @@ async function onAppBlacklistBtn(interaction) {
   guildDb.app_blacklist.push(sub.userId);
   await db.save();
 
-  return interaction.reply({ content: `🚫 <@${sub.userId}> is now blacklisted from opening applications.`, flags: MessageFlags.Ephemeral });
+  return interaction.reply({ content: `<@${sub.userId}> is now blacklisted from opening applications.`, flags: MessageFlags.Ephemeral });
 }
 
 async function onOpenTicketBtn(interaction, adminOnly) {
@@ -985,16 +1016,16 @@ async function onOpenTicketBtn(interaction, adminOnly) {
 
   let targetUser;
   try { targetUser = await interaction.client.users.fetch(sub.userId); }
-  catch { return interaction.editReply({ content: 'Could not find that user.' }); }
+  catch { return interaction.editReply({ content: 'Could not find that user.'}); }
 
   const channel = await tickets.createLinkedTicket(
     interaction.client, interaction.guild, targetUser, interaction.member, adminOnly, interaction.guildId,
   );
 
   if (!channel)
-    return interaction.editReply({ content: 'Failed to create ticket channel. Check bot permissions and category setup.' });
+    return interaction.editReply({ content: 'Failed to create ticket channel. Check bot permissions and category setup.'});
 
-  return interaction.editReply({ content: `✅ ${adminOnly ? 'Admin ticket' : 'Ticket'} created: ${channel}.` });
+  return interaction.editReply({ content: `${adminOnly ? 'Admin ticket': 'Ticket'} created: ${channel}.`});
 }
 
 // ─── Register ─────────────────────────────────────────────────────────────────
