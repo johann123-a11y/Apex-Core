@@ -302,8 +302,8 @@ function buildPanelButtonRows(panels) {
 
 function buildTicketTopButtons() {
   return new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(IDS.TICKET_REQUEST_CLOSE).setLabel(truncate('Request Close', DISCORD_LIMITS.BUTTON_LABEL)).setStyle(ButtonStyle.Secondary).setEmoji(''),
-    new ButtonBuilder().setCustomId(IDS.TICKET_CLOSE).setLabel(truncate('Close Ticket', DISCORD_LIMITS.BUTTON_LABEL)).setStyle(ButtonStyle.Danger).setEmoji(''),
+    new ButtonBuilder().setCustomId(IDS.TICKET_REQUEST_CLOSE).setLabel(truncate('Request Close', DISCORD_LIMITS.BUTTON_LABEL)).setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(IDS.TICKET_CLOSE).setLabel(truncate('Close Ticket', DISCORD_LIMITS.BUTTON_LABEL)).setStyle(ButtonStyle.Danger),
   );
 }
 
