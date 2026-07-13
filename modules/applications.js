@@ -599,6 +599,10 @@ async function processReview(interaction, decision, reason) {
   if (!checks.isStaff(interaction.member))
     return interaction.reply({ content: 'Staff only.', flags: MessageFlags.Ephemeral });
 
+  // Defer immediately — async work below can exceed Discord's 3-second interaction window
+  if (interaction.isButton()) await interaction.deferUpdate();
+  else await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
   // Extract submissionId from customId
   let submissionId;
   if (interaction.isButton()) {
@@ -614,9 +618,9 @@ async function processReview(interaction, decision, reason) {
   const g   = adb.guild(interaction.guildId);
   const sub = g.submissions.find((s) => s.submissionId === submissionId);
   if (!sub)
-    return interaction.reply({ content: 'Submission not found.', flags: MessageFlags.Ephemeral });
+    return interaction.editReply({ content: 'Submission not found.' });
   if (sub.status !== 'pending')
-    return interaction.reply({ content: 'This application has already been reviewed.', flags: MessageFlags.Ephemeral });
+    return interaction.editReply({ content: 'This application has already been reviewed.' });
 
   sub.status      = decision;
   sub.reviewedBy  = interaction.user.username;
@@ -628,45 +632,29 @@ async function processReview(interaction, decision, reason) {
   const app     = g.applications[sub.applicationId];
   const guildDb = db.guild(interaction.guildId);
 
-  // Delete pending message
-  if (sub.pendingChannelId && sub.pendingMessageId) {
-    const ch  = await interaction.client.channels.fetch(sub.pendingChannelId).catch(() => null);
-    const msg = ch ? await ch.messages.fetch(sub.pendingMessageId).catch(() => null) : null;
-    if (msg) await msg.delete().catch(() => {});
-  }
-
   if (decision === 'accepted') {
-    // Forward to website as 'pending' — website staff makes the final call
     forwardToWebsite(sub, app, decision, {
       guild_id: interaction.guildId,
       accepted_channel_id: guildDb.application_accepted_channel_id || null,
       denied_channel_id:   guildDb.application_denied_channel_id   || null,
     }).catch(() => {});
 
-    const replyMsg = 'Forwarded to website for final review.';
-    if (interaction.isModalSubmit()) {
-      return interaction.reply({ content: replyMsg, flags: MessageFlags.Ephemeral });
-    }
-    try {
-      return await interaction.update({
-        embeds: [new EmbedBuilder()
-          .setColor(0xFAA61A)
-          .setTitle(`Forwarded — ${app?.name ?? sub.applicationId}`)
-          .setDescription('Forwarded to website staff for final review.')
-          .addFields(
-            { name: 'User',     value: `<@${sub.userId}>`, inline: true },
-            { name: 'Username', value: sub.username,        inline: true },
-          )
-          .setFooter({ text: `Submission #${submissionId}` })
-          .setTimestamp()],
-        components: [],
-      });
-    } catch {
-      return interaction.reply({ content: replyMsg, flags: MessageFlags.Ephemeral }).catch(() => {});
-    }
+    return interaction.editReply({
+      embeds: [new EmbedBuilder()
+        .setColor(0xFAA61A)
+        .setTitle(`Forwarded — ${app?.name ?? sub.applicationId}`)
+        .setDescription('Forwarded to website staff for final review.')
+        .addFields(
+          { name: 'User',     value: `<@${sub.userId}>`, inline: true },
+          { name: 'Username', value: sub.username,        inline: true },
+        )
+        .setFooter({ text: `Submission #${submissionId}` })
+        .setTimestamp()],
+      components: [],
+    });
   }
 
-  // decision === 'declined' — final at Discord stage
+  // decision === 'denied'
   forwardToWebsite(sub, app, decision, {
     guild_id: interaction.guildId,
     accepted_channel_id: guildDb.application_accepted_channel_id || null,
@@ -699,30 +687,21 @@ async function processReview(interaction, decision, reason) {
   }
 
   // DM applicant
-  try {
-    const applicant = await interaction.client.users.fetch(sub.userId).catch(() => null);
-    if (applicant) {
-      await applicant.send({ embeds: [new EmbedBuilder()
-        .setColor(0xED4245)
-        .setTitle('Application declined')
-        .setDescription(
-          `You applied for **${app?.applyingFor ?? 'Unknown'}** in **${interaction.guild.name}**.\n\n` +
-          `**Decision:** Declined\n` +
-          `**Reason:** ${reason || 'No reason provided'}`,
-        )
-        .setTimestamp(),
-      ]}).catch(() => {});
-    }
-  } catch { /* ignore */ }
+  const applicant = await interaction.client.users.fetch(sub.userId).catch(() => null);
+  if (applicant) {
+    await applicant.send({ embeds: [new EmbedBuilder()
+      .setColor(0xED4245)
+      .setTitle('Application declined')
+      .setDescription(
+        `You applied for **${app?.applyingFor ?? 'Unknown'}** in **${interaction.guild.name}**.\n\n` +
+        `**Decision:** Declined\n` +
+        `**Reason:** ${reason || 'No reason provided'}`,
+      )
+      .setTimestamp(),
+    ]}).catch(() => {});
+  }
 
-  if (interaction.isModalSubmit()) {
-    return interaction.reply({ content: 'Declined.', flags: MessageFlags.Ephemeral });
-  }
-  try {
-    return await interaction.update({ embeds: [declinedEmbed], components: [] });
-  } catch {
-    return interaction.reply({ content: 'Declined.', flags: MessageFlags.Ephemeral }).catch(() => {});
-  }
+  return interaction.editReply({ embeds: [declinedEmbed], components: [] });
 }
 
 // ─── /application info — overview ────────────────────────────────────────────
