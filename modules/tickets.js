@@ -641,6 +641,9 @@ async function onPanelModal(interaction) {
   const panel = g.panels[panelId];
   if (!panel) return ephemeral(interaction, 'This panel no longer exists.');
 
+  const openCount = Object.values(g.tickets || {}).filter(t => t.user_id === uid).length;
+  if (openCount >= 5) return ephemeral(interaction, 'You already have 5 open tickets. Please wait for one to be closed before opening another.');
+
   const answers = {};
   const qs = (panel.questions || []).slice(0, DISCORD_LIMITS.MODAL_INPUTS_MAX);
   for (let i = 0; i < qs.length; i++) {
@@ -670,6 +673,9 @@ async function onPanelClick(interaction) {
   }
   const panel = g.panels[panelId];
   if (!panel) return ephemeral(interaction, 'This panel no longer exists.');
+
+  const openCount = Object.values(g.tickets || {}).filter(t => t.user_id === uid).length;
+  if (openCount >= 5) return ephemeral(interaction, 'You already have 5 open tickets. Please wait for one to be closed before opening another.');
 
   const qs = (panel.questions || []).slice(0, DISCORD_LIMITS.MODAL_INPUTS_MAX);
   if (qs.length === 0) {
