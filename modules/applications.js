@@ -649,19 +649,25 @@ async function processReview(interaction, decision, reason) {
       denied_channel_id:   guildDb.application_denied_channel_id   || null,
     }).catch(() => {});
 
-    return interaction.editReply({
-      embeds: [new EmbedBuilder()
-        .setColor(0xFAA61A)
-        .setTitle(`Forwarded — ${app?.name ?? sub.applicationId}`)
-        .setDescription('Forwarded to website staff for final review.')
-        .addFields(
-          { name: 'User',     value: `<@${sub.userId}>`, inline: true },
-          { name: 'Username', value: sub.username,        inline: true },
-        )
-        .setFooter({ text: `Submission #${submissionId}` })
-        .setTimestamp()],
-      components: [],
-    });
+    const forwardedEmbed = new EmbedBuilder()
+      .setColor(0xFAA61A)
+      .setTitle(`Forwarded — ${app?.name ?? sub.applicationId}`)
+      .setDescription('Forwarded to website staff for final review.')
+      .addFields(
+        { name: 'User',     value: `<@${sub.userId}>`, inline: true },
+        { name: 'Username', value: sub.username,        inline: true },
+      )
+      .setFooter({ text: `Submission #${submissionId}` })
+      .setTimestamp();
+
+    // Modal submit: editReply is ephemeral — update the pending channel message separately
+    if (interaction.isModalSubmit() && sub.pendingChannelId && sub.pendingMessageId) {
+      const pendingCh  = await interaction.client.channels.fetch(sub.pendingChannelId).catch(() => null);
+      const pendingMsg = pendingCh ? await pendingCh.messages.fetch(sub.pendingMessageId).catch(() => null) : null;
+      if (pendingMsg) await pendingMsg.edit({ embeds: [forwardedEmbed], components: [] }).catch(() => {});
+    }
+
+    return interaction.editReply({ embeds: [forwardedEmbed], components: [] });
   }
 
   // decision === 'denied'
@@ -709,6 +715,13 @@ async function processReview(interaction, decision, reason) {
       )
       .setTimestamp(),
     ]}).catch(() => {});
+  }
+
+  // Modal submit: editReply is ephemeral — update the pending channel message separately
+  if (interaction.isModalSubmit() && sub.pendingChannelId && sub.pendingMessageId) {
+    const pendingCh  = await interaction.client.channels.fetch(sub.pendingChannelId).catch(() => null);
+    const pendingMsg = pendingCh ? await pendingCh.messages.fetch(sub.pendingMessageId).catch(() => null) : null;
+    if (pendingMsg) await pendingMsg.edit({ embeds: [declinedEmbed], components: [] }).catch(() => {});
   }
 
   return interaction.editReply({ embeds: [declinedEmbed], components: [] });
