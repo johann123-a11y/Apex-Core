@@ -1168,6 +1168,41 @@ async function createTicketChannel(interaction, panel, answers) {
     console.error('[tickets] send initial msg failed:', err?.message);
   }
 
+  // Moderation history embed (visible to staff)
+  try {
+    const member = guild.members.cache.get(owner.id) || await guild.members.fetch(owner.id).catch(() => null);
+    const warnData = (g.warns || {})[owner.id] || { count: 0, history: [] };
+    const timedOutUntil = member?.communicationDisabledUntilTimestamp;
+    const isCurrentlyMuted = timedOutUntil && timedOutUntil > Date.now();
+
+    if (warnData.count > 0 || isCurrentlyMuted) {
+      const modEmbed = new EmbedBuilder()
+        .setColor(0xED4245)
+        .setTitle('⚠️ Moderation History')
+        .setFooter({ text: `User ID: ${owner.id}` })
+        .setTimestamp();
+
+      if (isCurrentlyMuted) {
+        modEmbed.addFields({ name: 'Currently Muted', value: `Until <t:${Math.floor(timedOutUntil / 1000)}:F>`, inline: false });
+      }
+
+      modEmbed.addFields({ name: 'Warnings', value: `**${warnData.count}**`, inline: true });
+
+      if (warnData.history.length) {
+        const last = warnData.history.slice(-5);
+        const offset = warnData.history.length - last.length;
+        const lines = last.map((e, i) =>
+          `**${offset + i + 1}.** ${truncate(e.reason || '_no reason_', 80)} — <@${e.by_id}> — <t:${Math.floor(e.at / 1000)}:R>`,
+        );
+        modEmbed.addFields({ name: `Last ${last.length} Warn(s)`, value: truncate(lines.join('\n'), DISCORD_LIMITS.EMBED_FIELD_VALUE), inline: false });
+      }
+
+      await channel.send({ embeds: [modEmbed] });
+    }
+  } catch (err) {
+    console.error('[tickets] send mod history failed:', err?.message);
+  }
+
   return channel;
 }
 
