@@ -15,8 +15,9 @@ const roles         = require('./modules/roles');
 const reactionroles  = require('./modules/reactionroles');
 const applications   = require('./modules/applications');
 const blacklist      = require('./modules/blacklist');
+const link           = require('./modules/link');
 
-const modules = [staff, tickets, logging, moderation, warns, welcome, giveaway, roles, reactionroles, applications, blacklist];
+const modules = [staff, tickets, logging, moderation, warns, welcome, giveaway, roles, reactionroles, applications, blacklist, link];
 
 function buildClient() {
   return new Client({
@@ -40,7 +41,7 @@ async function registerCommands() {
     throw new Error('DISCORD_TOKEN and DISCORD_CLIENT_ID must be set in .env');
   }
   const body = modules.flatMap((m) => (m.commands || []).map((c) => c.toJSON()));
-  const rest = new REST({ version: '10' }).setToken(TOKEN);
+  const rest = new REST({ version: '10'}).setToken(TOKEN);
   if (DEV_GUILD_ID) {
     console.log(`[register] Registering ${body.length} commands to dev guild ${DEV_GUILD_ID}…`);
     await rest.put(Routes.applicationGuildCommands(CLIENT_ID, DEV_GUILD_ID), { body });
@@ -72,6 +73,16 @@ async function main() {
   client.on('shardError', (e) => console.error('[apex-core] shard error:', e));
   process.on('unhandledRejection', (e) => console.error('[apex-core] unhandled rejection:', e));
   process.on('uncaughtException', (e) => console.error('[apex-core] uncaught exception:', e));
+
+  process.on('SIGTERM', async () => {
+    const flows = applications.getActiveFlows();
+    if (flows.size) {
+      await Promise.allSettled([...flows.values()].map(({ dmChannel, appName }) =>
+        dmChannel.send(`The bot is restarting. Your **${appName}** application was interrupted — please re-apply once the bot is back online.`).catch(() => {}),
+      ));
+    }
+    process.exit(0);
+  });
 
   await client.login(TOKEN);
 }

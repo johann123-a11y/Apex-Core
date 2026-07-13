@@ -449,8 +449,14 @@ async function onApplySelect(interaction) {
 
 // ─── DM question flow ─────────────────────────────────────────────────────────
 
+const activeFlows = new Map(); // userId -> { dmChannel, appName }
+
+function getActiveFlows() { return activeFlows; }
+
 async function runApplicationFlow(client, guild, user, app, guildId, dmChannel) {
+  activeFlows.set(user.id, { dmChannel, appName: app.name });
   const answers = [];
+  try {
 
   for (let i = 0; i < app.questions.length; i++) {
     const q = app.questions[i];
@@ -561,6 +567,10 @@ async function runApplicationFlow(client, guild, user, app, guildId, dmChannel) 
   const sub = g.submissions.find((s) => s.submissionId === submissionId);
   if (sub) { sub.pendingMessageId = sent.id; sub.pendingChannelId = pendingCh.id; }
   await adb.save();
+
+  } finally {
+    activeFlows.delete(user.id);
+  }
 }
 
 // ─── Review flow ──────────────────────────────────────────────────────────────
@@ -1105,4 +1115,4 @@ function register(client) {
   });
 }
 
-module.exports = { commands: [command], register };
+module.exports = { commands: [command], register, getActiveFlows };
