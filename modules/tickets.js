@@ -1449,12 +1449,16 @@ async function createLinkedTicket(client, guild, targetUser, staffMember, adminO
   let channel;
   try {
     const firstPanel = Object.values(g.panels)[0];
+    const rawCatId = firstPanel?.category_id;
+    const categoryId = rawCatId && guild.channels.cache.get(rawCatId)?.type === ChannelType.GuildCategory
+      ? rawCatId : undefined;
+
     channel = await guild.channels.create({
       name,
-      type: 0, // GuildText
-      parent: firstPanel?.category_id || undefined,
+      type: ChannelType.GuildText,
+      parent: categoryId,
       permissionOverwrites: overwrites,
-      topic: truncate(`${adminOnly ? 'Admin ticket': 'Ticket'} for ${targetUser.tag} · opened by ${staffMember.user.tag}`, 1024),
+      topic: truncate(`${adminOnly ? 'Admin ticket': 'Ticket'} for ${targetUser.username} · opened by ${staffMember.user.username}`, 1024),
     });
   } catch (e) {
     console.error('[tickets] createLinkedTicket channel failed:', e?.message);
