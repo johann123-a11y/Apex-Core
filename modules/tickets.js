@@ -1448,8 +1448,7 @@ async function createLinkedTicket(client, guild, targetUser, staffMember, adminO
 
   let channel;
   try {
-    const firstPanel = Object.values(g.panels)[0];
-    const rawCatId = firstPanel?.category_id;
+    const rawCatId = g.application_ticket_category_id;
     const categoryId = rawCatId && guild.channels.cache.get(rawCatId)?.type === ChannelType.GuildCategory
       ? rawCatId : undefined;
 

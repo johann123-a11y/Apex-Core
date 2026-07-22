@@ -115,7 +115,11 @@ const command = new SlashCommandBuilder()
     s.setName('denied').setDescription('Set channel for denied applications')
       .addChannelOption((o) => o.setName('channel').setDescription('Channel').setRequired(true)),
   )
-  .addSubcommand((s) => s.setName('info').setDescription('View and manage all applications'));
+  .addSubcommand((s) => s.setName('info').setDescription('View and manage all applications'))
+  .addSubcommand((s) =>
+    s.setName('ticket-category').setDescription('Set the Discord category for application-linked tickets')
+      .addStringOption((o) => o.setName('category_id').setDescription('Category ID (omit to clear)').setRequired(false).setMaxLength(21)),
+  );
 
 // ─── Setup embed helpers ──────────────────────────────────────────────────────
 
@@ -397,6 +401,33 @@ async function handleChannel(interaction, type) {
 
   const labels = { pending: 'Pending', accepted: 'Accepted', denied: 'Denied'};
   return interaction.reply({ content: `${labels[type]} channel set to ${ch}.`, flags: MessageFlags.Ephemeral });
+}
+
+// ─── /application ticket-category ────────────────────────────────────────────
+
+async function handleTicketCategory(interaction) {
+  if (!checks.isAdmin(interaction.member))
+    return interaction.reply({ content: 'Admins only.', flags: MessageFlags.Ephemeral });
+
+  const raw = interaction.options.getString('category_id')?.trim() || null;
+  const g = db.guild(interaction.guildId);
+
+  if (!raw) {
+    g.application_ticket_category_id = null;
+    await db.save();
+    return interaction.reply({ content: 'Application ticket category cleared.', flags: MessageFlags.Ephemeral });
+  }
+
+  if (!/^\d{15,21}$/.test(raw))
+    return interaction.reply({ content: 'Invalid ID — must be a Discord snowflake.', flags: MessageFlags.Ephemeral });
+
+  const cat = interaction.guild.channels.cache.get(raw);
+  if (!cat || cat.type !== 4) // 4 = GuildCategory
+    return interaction.reply({ content: 'That ID does not match a category in this server.', flags: MessageFlags.Ephemeral });
+
+  g.application_ticket_category_id = raw;
+  await db.save();
+  return interaction.reply({ content: `Application ticket category set to **${cat.name}**.`, flags: MessageFlags.Ephemeral });
 }
 
 // ─── Apply select (user picks application) ────────────────────────────────────
@@ -1073,7 +1104,8 @@ function register(client) {
         if (sub === 'pending')     return await handleChannel(interaction, 'pending');
         if (sub === 'accepted')    return await handleChannel(interaction, 'accepted');
         if (sub === 'denied')      return await handleChannel(interaction, 'denied');
-        if (sub === 'info')        return await handleInfo(interaction);
+        if (sub === 'info')             return await handleInfo(interaction);
+        if (sub === 'ticket-category')  return await handleTicketCategory(interaction);
       }
 
       if (interaction.isModalSubmit()) {
