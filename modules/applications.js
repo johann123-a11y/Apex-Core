@@ -673,56 +673,74 @@ async function processReview(interaction, decision, reason) {
   const app     = g.applications[sub.applicationId];
   const guildDb = db.guild(interaction.guildId);
 
-  if (decision === 'accepted') {
-    forwardToWebsite(sub, app, decision, {
-      guild_id: interaction.guildId,
-      accepted_channel_id: guildDb.application_accepted_channel_id || null,
-      denied_channel_id:   guildDb.application_denied_channel_id   || null,
-    }).catch(() => {});
+  const answerFields = sub.answers.slice(0, 20).map(a => ({
+    name:  truncate(a.question, DISCORD_LIMITS.EMBED_FIELD_NAME),
+    value: truncate(a.answer || '—', DISCORD_LIMITS.EMBED_FIELD_VALUE),
+    inline: false,
+  }));
 
-    const forwardedEmbed = new EmbedBuilder()
-      .setColor(0xFAA61A)
-      .setTitle(`Forwarded — ${app?.name ?? sub.applicationId}`)
-      .setDescription('Forwarded to website staff for final review.')
+  if (decision === 'accepted') {
+    // Give role if configured
+    if (app?.roleOnAccept) {
+      const member = await interaction.guild.members.fetch(sub.userId).catch(() => null);
+      if (member) await member.roles.add(app.roleOnAccept).catch(() => {});
+    }
+
+    const acceptedEmbed = new EmbedBuilder()
+      .setColor(0x57F287)
+      .setTitle(`Accepted — ${app?.name ?? sub.applicationId}`)
       .addFields(
-        { name: 'User',     value: `<@${sub.userId}>`, inline: true },
-        { name: 'Username', value: sub.username,        inline: true },
+        { name: 'User',        value: `<@${sub.userId}>`,          inline: true },
+        { name: 'Username',    value: sub.username,                 inline: true },
+        { name: 'Reviewed by', value: `<@${interaction.user.id}>`, inline: true },
+        { name: 'Reason',      value: reason || '_No reason provided_', inline: false },
+        ...answerFields,
       )
       .setFooter({ text: `Submission #${submissionId}` })
       .setTimestamp();
+
+    // Post to accepted channel
+    if (guildDb.application_accepted_channel_id) {
+      const acceptedCh = await interaction.client.channels.fetch(guildDb.application_accepted_channel_id).catch(() => null);
+      if (acceptedCh?.isTextBased()) await acceptedCh.send({ embeds: [acceptedEmbed] }).catch(() => {});
+    }
+
+    // DM applicant
+    const applicant = await interaction.client.users.fetch(sub.userId).catch(() => null);
+    if (applicant) {
+      await applicant.send({ embeds: [new EmbedBuilder()
+        .setColor(0x57F287)
+        .setTitle('Application accepted')
+        .setDescription(
+          `You applied for **${app?.applyingFor ?? 'Unknown'}** in **${interaction.guild.name}**.\n\n` +
+          `**Decision:** Accepted` +
+          (reason ? `\n**Reason:** ${reason}` : ''),
+        )
+        .setTimestamp(),
+      ]}).catch(() => {});
+    }
 
     // Modal submit: editReply is ephemeral — update the pending channel message separately
     if (interaction.isModalSubmit() && sub.pendingChannelId && sub.pendingMessageId) {
       const pendingCh  = await interaction.client.channels.fetch(sub.pendingChannelId).catch(() => null);
       const pendingMsg = pendingCh ? await pendingCh.messages.fetch(sub.pendingMessageId).catch(() => null) : null;
-      if (pendingMsg) await pendingMsg.edit({ embeds: [forwardedEmbed], components: [] }).catch(() => {});
+      if (pendingMsg) await pendingMsg.edit({ embeds: [acceptedEmbed], components: [] }).catch(() => {});
     }
 
-    return interaction.editReply({ embeds: [forwardedEmbed], components: [] });
+    return interaction.editReply({ embeds: [acceptedEmbed], components: [] });
   }
 
   // decision === 'denied'
-  forwardToWebsite(sub, app, decision, {
-    guild_id: interaction.guildId,
-    accepted_channel_id: guildDb.application_accepted_channel_id || null,
-    denied_channel_id:   guildDb.application_denied_channel_id   || null,
-  }).catch(() => {});
-
-  const declinedAnswerFields = sub.answers.slice(0, 20).map(a => ({
-    name: truncate(a.question, DISCORD_LIMITS.EMBED_FIELD_NAME),
-    value: truncate(a.answer || '—', DISCORD_LIMITS.EMBED_FIELD_VALUE),
-    inline: false,
-  }));
 
   const declinedEmbed = new EmbedBuilder()
     .setColor(0xED4245)
     .setTitle(`Declined — ${app?.name ?? sub.applicationId}`)
     .addFields(
-      { name: 'User',        value: `<@${sub.userId}>`,               inline: true  },
-      { name: 'Username',    value: sub.username,                      inline: true  },
-      { name: 'Reviewed by', value: `<@${interaction.user.id}>`,      inline: true  },
-      { name: 'Reason',      value: reason || '_No reason provided_',  inline: false },
-      ...declinedAnswerFields,
+      { name: 'User',        value: `<@${sub.userId}>`,              inline: true  },
+      { name: 'Username',    value: sub.username,                     inline: true  },
+      { name: 'Reviewed by', value: `<@${interaction.user.id}>`,     inline: true  },
+      { name: 'Reason',      value: reason || '_No reason provided_', inline: false },
+      ...answerFields,
     )
     .setFooter({ text: `Submission #${submissionId}` })
     .setTimestamp();
